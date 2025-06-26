@@ -2,6 +2,8 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useWallet } from '../contexts/WalletContext';
+import TokenSelector from '../components/TokenSelector';
+import { Input } from '../components/ui/input';
 
 const Swap = () => {
   const { isConnected, walletAddress } = useWallet();
@@ -10,17 +12,10 @@ const Swap = () => {
   const [amount, setAmount] = useState('');
   const [estimatedOutput, setEstimatedOutput] = useState('');
 
-  const tokens = [
-    { symbol: 'BTC', name: 'Bitcoin', network: 'Bitcoin' },
-    { symbol: 'ETH', name: 'Ethereum', network: 'Ethereum' },
-    { symbol: 'BNB', name: 'BNB', network: 'BSC' },
-    { symbol: 'ATOM', name: 'Cosmos', network: 'Cosmos' },
-    { symbol: 'AVAX', name: 'Avalanche', network: 'Avalanche' },
-  ];
-
   const handleSwapTokens = () => {
     setFromToken(toToken);
     setToToken(fromToken);
+    setEstimatedOutput(''); // Clear estimate when swapping
   };
 
   const handleEstimate = () => {
@@ -78,44 +73,32 @@ const Swap = () => {
         >
           {/* From Token */}
           <div className="mb-4">
-            <label className="block text-sm font-medium text-foreground mb-2">
-              Desde
-            </label>
-            <div className="bg-background rounded-lg p-4 border border-border">
-              <div className="flex justify-between items-center">
-                <select
-                  value={fromToken}
-                  onChange={(e) => setFromToken(e.target.value)}
-                  className="bg-transparent text-foreground text-lg font-semibold border-none outline-none"
-                >
-                  {tokens.map((token) => (
-                    <option key={token.symbol} value={token.symbol}>
-                      {token.symbol}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.0"
-                  className="bg-transparent text-right text-2xl font-bold text-foreground placeholder-muted-foreground border-none outline-none"
-                />
-              </div>
+            <TokenSelector
+              value={fromToken}
+              onChange={setFromToken}
+              label="Desde"
+              excludeToken={toToken}
+            />
+            <div className="mt-3">
+              <Input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.0"
+                className="text-right text-xl font-bold"
+              />
               <div className="flex justify-between mt-2 text-sm text-muted-foreground">
-                <span>
-                  {tokens.find(t => t.symbol === fromToken)?.network}
-                </span>
                 <span>Balance: 1.25 {fromToken}</span>
+                <span>≈ ${(parseFloat(amount || '0') * 45000).toFixed(2)}</span>
               </div>
             </div>
           </div>
 
           {/* Swap Button */}
-          <div className="flex justify-center my-4">
+          <div className="flex justify-center my-6">
             <button
               onClick={handleSwapTokens}
-              className="p-2 rounded-full border border-border hover:bg-accent transition-all duration-200 hover:scale-110"
+              className="p-3 rounded-full border border-border hover:bg-accent transition-all duration-200 hover:scale-110"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
@@ -125,34 +108,22 @@ const Swap = () => {
 
           {/* To Token */}
           <div className="mb-6">
-            <label className="block text-sm font-medium text-foreground mb-2">
-              Hacia
-            </label>
-            <div className="bg-background rounded-lg p-4 border border-border">
-              <div className="flex justify-between items-center">
-                <select
-                  value={toToken}
-                  onChange={(e) => setToToken(e.target.value)}
-                  className="bg-transparent text-foreground text-lg font-semibold border-none outline-none"
-                >
-                  {tokens.map((token) => (
-                    <option key={token.symbol} value={token.symbol}>
-                      {token.symbol}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  value={estimatedOutput}
-                  placeholder="0.0"
-                  readOnly
-                  className="bg-transparent text-right text-2xl font-bold text-foreground placeholder-muted-foreground border-none outline-none"
-                />
-              </div>
+            <TokenSelector
+              value={toToken}
+              onChange={setToToken}
+              label="Hacia"
+              excludeToken={fromToken}
+            />
+            <div className="mt-3">
+              <Input
+                type="text"
+                value={estimatedOutput}
+                placeholder="0.0"
+                readOnly
+                className="text-right text-xl font-bold bg-muted"
+              />
               <div className="flex justify-between mt-2 text-sm text-muted-foreground">
-                <span>
-                  {tokens.find(t => t.symbol === toToken)?.network}
-                </span>
+                <span>Estimado</span>
                 <span>≈ ${(parseFloat(estimatedOutput || '0') * 2500).toFixed(2)}</span>
               </div>
             </div>
