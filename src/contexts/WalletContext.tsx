@@ -20,8 +20,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const connect = async (type: string) => {
     try {
-      // Simulamos la conexión de wallet por ahora
       console.log(`Connecting to ${type} wallet...`);
+      
+      // Por ahora simulamos la conexión hasta implementar SwapKit completamente
       setIsConnected(true);
       setWalletType(type);
       setWalletAddress('0x1234...5678'); // Dirección mock
