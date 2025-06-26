@@ -1,37 +1,47 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useSwapAssets } from '../hooks/useSwapAssets';
 
 const ManualSwap = () => {
-  const [fromToken, setFromToken] = useState('BTC');
-  const [toToken, setToToken] = useState('ETH');
+  const { assets, loading } = useSwapAssets();
+  const [fromToken, setFromToken] = useState('BTC.BTC');
+  const [toToken, setToToken] = useState('ETH.ETH');
   const [amount, setAmount] = useState('');
   const [destinationAddress, setDestinationAddress] = useState('');
   const [swapDetails, setSwapDetails] = useState(null);
 
-  const tokens = [
-    { symbol: 'BTC', name: 'Bitcoin', network: 'Bitcoin' },
-    { symbol: 'ETH', name: 'Ethereum', network: 'Ethereum' },
-    { symbol: 'BNB', name: 'BNB', network: 'BSC' },
-    { symbol: 'ATOM', name: 'Cosmos', network: 'Cosmos' },
-    { symbol: 'AVAX', name: 'Avalanche', network: 'Avalanche' },
-  ];
-
   const generateSwapAddress = () => {
     if (!amount || !destinationAddress) return;
+
+    const fromAsset = assets.find(asset => asset.identifier === fromToken);
+    const toAsset = assets.find(asset => asset.identifier === toToken);
 
     // Simulación de generación de dirección de swap
     const mockSwapDetails = {
       depositAddress: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
-      memo: 'SWAP:ETH.ETH:' + destinationAddress,
+      memo: `SWAP:${toToken}:${destinationAddress}`,
       exactAmount: amount,
       estimatedOutput: (parseFloat(amount) * 15.2).toFixed(6),
       estimatedTime: '3-7 minutos',
-      rate: '1 BTC = 15.2 ETH'
+      rate: `1 ${fromAsset?.ticker || 'BTC'} = 15.2 ${toAsset?.ticker || 'ETH'}`,
+      fromAsset,
+      toAsset
     };
 
     setSwapDetails(mockSwapDetails);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="animate-pulse text-center">
+          <div className="h-8 bg-muted rounded w-48 mb-4 mx-auto"></div>
+          <div className="h-4 bg-muted rounded w-32 mx-auto"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen py-8 px-4">
@@ -81,12 +91,24 @@ const ManualSwap = () => {
                 onChange={(e) => setFromToken(e.target.value)}
                 className="w-full bg-background border border-border rounded-lg px-4 py-3 text-foreground"
               >
-                {tokens.map((token) => (
-                  <option key={token.symbol} value={token.symbol}>
-                    {token.symbol} - {token.network}
+                {assets.map((asset) => (
+                  <option key={asset.identifier} value={asset.identifier}>
+                    {asset.ticker} - {asset.chain}
                   </option>
                 ))}
               </select>
+              {assets.find(a => a.identifier === fromToken)?.logoURI && (
+                <div className="flex items-center space-x-2 mt-2">
+                  <img 
+                    src={assets.find(a => a.identifier === fromToken)?.logoURI} 
+                    alt={assets.find(a => a.identifier === fromToken)?.name}
+                    className="w-6 h-6 rounded-full"
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    {assets.find(a => a.identifier === fromToken)?.name}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* To Token */}
@@ -99,12 +121,24 @@ const ManualSwap = () => {
                 onChange={(e) => setToToken(e.target.value)}
                 className="w-full bg-background border border-border rounded-lg px-4 py-3 text-foreground"
               >
-                {tokens.map((token) => (
-                  <option key={token.symbol} value={token.symbol}>
-                    {token.symbol} - {token.network}
+                {assets.map((asset) => (
+                  <option key={asset.identifier} value={asset.identifier}>
+                    {asset.ticker} - {asset.chain}
                   </option>
                 ))}
               </select>
+              {assets.find(a => a.identifier === toToken)?.logoURI && (
+                <div className="flex items-center space-x-2 mt-2">
+                  <img 
+                    src={assets.find(a => a.identifier === toToken)?.logoURI} 
+                    alt={assets.find(a => a.identifier === toToken)?.name}
+                    className="w-6 h-6 rounded-full"
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    {assets.find(a => a.identifier === toToken)?.name}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Amount */}
@@ -116,7 +150,7 @@ const ManualSwap = () => {
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder={`0.0 ${fromToken}`}
+                placeholder={`0.0 ${assets.find(a => a.identifier === fromToken)?.ticker || ''}`}
                 className="w-full bg-background border border-border rounded-lg px-4 py-3 text-foreground placeholder-muted-foreground"
               />
             </div>
@@ -124,13 +158,13 @@ const ManualSwap = () => {
             {/* Destination Address */}
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
-                Dirección de destino ({toToken})
+                Dirección de destino ({assets.find(a => a.identifier === toToken)?.ticker})
               </label>
               <input
                 type="text"
                 value={destinationAddress}
                 onChange={(e) => setDestinationAddress(e.target.value)}
-                placeholder={`Tu dirección de ${toToken}`}
+                placeholder={`Tu dirección de ${assets.find(a => a.identifier === toToken)?.ticker}`}
                 className="w-full bg-background border border-border rounded-lg px-4 py-3 text-foreground placeholder-muted-foreground font-mono text-sm"
               />
             </div>
@@ -162,8 +196,17 @@ const ManualSwap = () => {
                     <div className="text-sm font-medium text-primary mb-2">
                       1. Envía exactamente esta cantidad:
                     </div>
-                    <div className="font-mono text-lg font-bold text-foreground">
-                      {swapDetails.exactAmount} {fromToken}
+                    <div className="flex items-center space-x-2">
+                      {swapDetails.fromAsset?.logoURI && (
+                        <img 
+                          src={swapDetails.fromAsset.logoURI} 
+                          alt={swapDetails.fromAsset.name}
+                          className="w-6 h-6 rounded-full"
+                        />
+                      )}
+                      <div className="font-mono text-lg font-bold text-foreground">
+                        {swapDetails.exactAmount} {swapDetails.fromAsset?.ticker}
+                      </div>
                     </div>
                   </div>
 
@@ -188,8 +231,17 @@ const ManualSwap = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border">
                     <div>
                       <div className="text-sm text-muted-foreground">Recibirás aproximadamente:</div>
-                      <div className="font-semibold text-foreground">
-                        {swapDetails.estimatedOutput} {toToken}
+                      <div className="flex items-center space-x-2">
+                        {swapDetails.toAsset?.logoURI && (
+                          <img 
+                            src={swapDetails.toAsset.logoURI} 
+                            alt={swapDetails.toAsset.name}
+                            className="w-5 h-5 rounded-full"
+                          />
+                        )}
+                        <div className="font-semibold text-foreground">
+                          {swapDetails.estimatedOutput} {swapDetails.toAsset?.ticker}
+                        </div>
                       </div>
                     </div>
                     <div>

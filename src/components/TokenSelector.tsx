@@ -21,12 +21,14 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const selectedAsset = assets.find(asset => asset.symbol === value);
+  const selectedAsset = assets.find(asset => asset.identifier === value || asset.ticker === value);
   
   const filteredAssets = assets.filter(asset => 
-    asset.symbol !== excludeToken &&
-    (asset.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     asset.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    asset.identifier !== excludeToken &&
+    asset.ticker !== excludeToken &&
+    (asset.ticker.toLowerCase().includes(searchTerm.toLowerCase()) ||
+     asset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+     asset.chain.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   if (loading) {
@@ -51,12 +53,25 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
         className="w-full bg-background rounded-lg p-4 border border-border flex justify-between items-center hover:border-primary/50 transition-colors"
       >
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-r from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold text-sm">
-            {selectedAsset?.symbol.charAt(0) || '?'}
+          {selectedAsset?.logoURI ? (
+            <img 
+              src={selectedAsset.logoURI} 
+              alt={selectedAsset.name}
+              className="w-8 h-8 rounded-full"
+              onError={(e) => {
+                // Fallback if image fails to load
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+                target.nextElementSibling?.classList.remove('hidden');
+              }}
+            />
+          ) : null}
+          <div className={`w-8 h-8 rounded-full bg-gradient-to-r from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold text-sm ${selectedAsset?.logoURI ? 'hidden' : ''}`}>
+            {selectedAsset?.ticker.charAt(0) || '?'}
           </div>
           <div className="text-left">
-            <div className="font-semibold text-foreground">{selectedAsset?.symbol || 'Select'}</div>
-            <div className="text-sm text-muted-foreground">{selectedAsset?.network}</div>
+            <div className="font-semibold text-foreground">{selectedAsset?.ticker || 'Select'}</div>
+            <div className="text-sm text-muted-foreground">{selectedAsset?.chain}</div>
           </div>
         </div>
         <ChevronDown className={`w-5 h-5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -86,20 +101,32 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
             <div className="max-h-60 overflow-y-auto">
               {filteredAssets.map((asset) => (
                 <button
-                  key={asset.symbol}
+                  key={asset.identifier}
                   onClick={() => {
-                    onChange(asset.symbol);
+                    onChange(asset.identifier);
                     setIsOpen(false);
                     setSearchTerm('');
                   }}
                   className="w-full p-3 hover:bg-accent flex items-center space-x-3 transition-colors"
                 >
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-r from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold text-sm">
-                    {asset.symbol.charAt(0)}
+                  {asset.logoURI ? (
+                    <img 
+                      src={asset.logoURI} 
+                      alt={asset.name}
+                      className="w-8 h-8 rounded-full"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        target.nextElementSibling?.classList.remove('hidden');
+                      }}
+                    />
+                  ) : null}
+                  <div className={`w-8 h-8 rounded-full bg-gradient-to-r from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold text-sm ${asset.logoURI ? 'hidden' : ''}`}>
+                    {asset.ticker.charAt(0)}
                   </div>
                   <div className="text-left">
-                    <div className="font-medium text-foreground">{asset.symbol}</div>
-                    <div className="text-sm text-muted-foreground">{asset.name} • {asset.network}</div>
+                    <div className="font-medium text-foreground">{asset.ticker}</div>
+                    <div className="text-sm text-muted-foreground">{asset.name} • {asset.chain}</div>
                   </div>
                 </button>
               ))}

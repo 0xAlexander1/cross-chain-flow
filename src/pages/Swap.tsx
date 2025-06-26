@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useWallet } from '../contexts/WalletContext';
@@ -7,8 +6,8 @@ import { Input } from '../components/ui/input';
 
 const Swap = () => {
   const { isConnected, walletAddress } = useWallet();
-  const [fromToken, setFromToken] = useState('BTC');
-  const [toToken, setToToken] = useState('ETH');
+  const [fromToken, setFromToken] = useState('BTC.BTC');
+  const [toToken, setToToken] = useState('ETH.ETH');
   const [amount, setAmount] = useState('');
   const [estimatedOutput, setEstimatedOutput] = useState('');
 
@@ -49,6 +48,11 @@ const Swap = () => {
     );
   }
 
+  // Get ticker from identifier for display
+  const getTickerFromIdentifier = (identifier: string) => {
+    return identifier.split('.')[1] || identifier;
+  };
+
   return (
     <div className="min-h-screen py-8 px-4">
       <div className="max-w-2xl mx-auto">
@@ -88,7 +92,7 @@ const Swap = () => {
                 className="text-right text-xl font-bold"
               />
               <div className="flex justify-between mt-2 text-sm text-muted-foreground">
-                <span>Balance: 1.25 {fromToken}</span>
+                <span>Balance: 1.25 {getTickerFromIdentifier(fromToken)}</span>
                 <span>≈ ${(parseFloat(amount || '0') * 45000).toFixed(2)}</span>
               </div>
             </div>
