@@ -1,1 +1,11 @@
+
 project_id = "bwinkqdcxxwnommdjxsn"
+
+[functions.get-supported-assets]
+verify_jwt = false
+
+[functions.get-swap-details]
+verify_jwt = false
+
+[functions.swap-status]
+verify_jwt = false

@@ -1,9 +1,10 @@
 
 import { useState, useEffect } from 'react';
+import { useSwapKit } from './useSwapKit';
 
 interface SwapAsset {
   chain: string;
-  chainId: string;
+  chainId?: string;
   ticker: string;
   identifier: string;
   symbol: string;
@@ -18,38 +19,28 @@ export const useSwapAssets = () => {
   const [assets, setAssets] = useState<SwapAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { getSupportedAssets } = useSwapKit();
 
   useEffect(() => {
     const fetchAssets = async () => {
       try {
         setLoading(true);
         
-        // Fetch tokens from SwapKit API
-        const response = await fetch('https://api.swapkit.dev/tokens?provider=CHAINFLIP', {
-          method: 'GET',
-          headers: {
-            'accept': 'application/json'
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
+        console.log('Fetching assets from SwapKit backend...');
+        const supportedAssets = await getSupportedAssets();
         
-        if (data.tokens && Array.isArray(data.tokens)) {
-          setAssets(data.tokens);
-          console.log(`Loaded ${data.tokens.length} tokens from SwapKit API`);
+        if (supportedAssets && Array.isArray(supportedAssets)) {
+          setAssets(supportedAssets);
+          console.log(`Loaded ${supportedAssets.length} tokens from SwapKit backend`);
+          setError(null);
         } else {
-          throw new Error('Invalid response format from SwapKit API');
+          throw new Error('Invalid response format from SwapKit backend');
         }
         
-        setError(null);
       } catch (err) {
-        console.error('Error fetching swap assets:', err);
+        console.error('Error fetching swap assets from backend:', err);
         
-        // Fallback to mock data if API fails
+        // Fallback to mock data if backend fails
         const mockAssets: SwapAsset[] = [
           { 
             chain: 'BTC', 
@@ -87,7 +78,7 @@ export const useSwapAssets = () => {
         ];
         
         setAssets(mockAssets);
-        setError('Failed to load tokens from API, using fallback data');
+        setError('Failed to load tokens from backend, using fallback data');
       } finally {
         setLoading(false);
       }
