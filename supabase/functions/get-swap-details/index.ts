@@ -46,7 +46,7 @@ serve(async (req) => {
       throw new Error('SWAPKIT_API_KEY not found in environment variables');
     }
 
-    // Get swap quote from SwapKit API
+    // Get swap quote from SwapKit API with multiple providers
     const quoteResponse = await fetch('https://api.swapkit.dev/quote', {
       method: 'POST',
       headers: {
@@ -59,7 +59,7 @@ serve(async (req) => {
         buyAsset: toAsset,
         sellAmount: amount,
         recipientAddress: recipient,
-        providers: ['CHAINFLIP']
+        providers: ['MAYACHAIN', 'THORCHAIN', 'CHAINFLIP'] // Multiple providers in order of preference
       })
     });
 
