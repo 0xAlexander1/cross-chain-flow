@@ -7,10 +7,11 @@ import { SwapConfirmation } from '../components/SwapConfirmation';
 import { SwapProgress } from '../components/SwapProgress';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
+import { AlertCircle } from 'lucide-react';
 
 const ManualSwap = () => {
-  const { assets, loading } = useSwapAssets();
-  const { getSwapDetails, getSwapStatus, loading: swapLoading } = useSwapKit();
+  const { assets, loading: assetsLoading, error: assetsError, refreshAssets } = useSwapAssets();
+  const { getSwapDetails, getSwapStatus, loading: swapLoading, error: swapError } = useSwapKit();
   const { toast } = useToast();
   
   const [fromToken, setFromToken] = useState('BTC.BTC');
@@ -31,6 +32,25 @@ const ManualSwap = () => {
       return;
     }
 
+    // Basic validation
+    if (parseFloat(amount) <= 0) {
+      toast({
+        title: "Cantidad inválida",
+        description: "La cantidad debe ser mayor a 0",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (fromToken === toToken) {
+      toast({
+        title: "Tokens iguales",
+        description: "Selecciona tokens diferentes para el intercambio",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
       console.log('Getting swap details for:', { fromToken, toToken, amount, destinationAddress });
       
@@ -39,10 +59,13 @@ const ManualSwap = () => {
       console.log('Swap details received:', details);
       
       if (details) {
+        const fromAsset = assets.find(asset => asset.identifier === fromToken);
+        const toAsset = assets.find(asset => asset.identifier === toToken);
+        
         setSwapDetails({
           ...details,
-          fromAsset: assets.find(asset => asset.identifier === fromToken),
-          toAsset: assets.find(asset => asset.identifier === toToken),
+          fromAsset,
+          toAsset,
           exactAmount: amount,
           recipient: destinationAddress
         });
@@ -52,13 +75,13 @@ const ManualSwap = () => {
       console.error('Error getting swap details:', error);
       toast({
         title: "Error al obtener detalles",
-        description: error.message || "No se pudieron obtener los detalles del swap",
+        description: error instanceof Error ? error.message : "No se pudieron obtener los detalles del swap",
         variant: "destructive"
       });
     }
   };
 
-  const handleConfirmSwap = (transactionHash) => {
+  const handleConfirmSwap = (transactionHash: string) => {
     setTxHash(transactionHash);
     setCurrentStep('progress');
   };
@@ -77,12 +100,30 @@ const ManualSwap = () => {
     setDestinationAddress('');
   };
 
-  if (loading) {
+  // Loading state
+  if (assetsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="animate-pulse text-center">
           <div className="h-8 bg-muted rounded w-48 mb-4 mx-auto"></div>
           <div className="h-4 bg-muted rounded w-32 mx-auto"></div>
+          <p className="text-muted-foreground mt-2">Cargando tokens disponibles...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (assetsError && assets.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="text-center max-w-md">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-foreground mb-2">Error al cargar tokens</h2>
+          <p className="text-muted-foreground mb-4">{assetsError}</p>
+          <Button onClick={refreshAssets}>
+            Reintentar
+          </Button>
         </div>
       </div>
     );
@@ -127,6 +168,21 @@ const ManualSwap = () => {
                 </div>
               </div>
 
+              {/* Assets Error Warning */}
+              {assetsError && (
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 mb-6">
+                  <div className="flex items-start space-x-3">
+                    <div className="text-yellow-600 text-xl">⚠️</div>
+                    <div>
+                      <h3 className="font-semibold text-yellow-600 mb-1">Aviso</h3>
+                      <p className="text-sm text-foreground">
+                        {assetsError}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Form */}
               <div className="space-y-4">
                 {/* From Token */}
@@ -151,6 +207,10 @@ const ManualSwap = () => {
                         src={assets.find(a => a.identifier === fromToken)?.logoURI} 
                         alt={assets.find(a => a.identifier === fromToken)?.name}
                         className="w-6 h-6 rounded-full"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                        }}
                       />
                       <span className="text-sm text-muted-foreground">
                         {assets.find(a => a.identifier === fromToken)?.name}
@@ -169,7 +229,7 @@ const ManualSwap = () => {
                     onChange={(e) => setToToken(e.target.value)}
                     className="w-full bg-background border border-border rounded-lg px-4 py-3 text-foreground"
                   >
-                    {assets.map((asset) => (
+                    {assets.filter(asset => asset.identifier !== fromToken).map((asset) => (
                       <option key={asset.identifier} value={asset.identifier}>
                         {asset.ticker} - {asset.chain}
                       </option>
@@ -181,6 +241,10 @@ const ManualSwap = () => {
                         src={assets.find(a => a.identifier === toToken)?.logoURI} 
                         alt={assets.find(a => a.identifier === toToken)?.name}
                         className="w-6 h-6 rounded-full"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                        }}
                       />
                       <span className="text-sm text-muted-foreground">
                         {assets.find(a => a.identifier === toToken)?.name}
@@ -200,6 +264,8 @@ const ManualSwap = () => {
                     onChange={(e) => setAmount(e.target.value)}
                     placeholder={`0.0 ${assets.find(a => a.identifier === fromToken)?.ticker || ''}`}
                     className="w-full bg-background border border-border rounded-lg px-4 py-3 text-foreground placeholder-muted-foreground"
+                    step="any"
+                    min="0"
                   />
                 </div>
 
@@ -226,6 +292,19 @@ const ManualSwap = () => {
                 >
                   {swapLoading ? 'Obteniendo cotización...' : 'Obtener Cotización'}
                 </Button>
+
+                {/* Swap Error */}
+                {swapError && (
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+                    <div className="flex items-start space-x-3">
+                      <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+                      <div>
+                        <h4 className="font-semibold text-red-600 mb-1">Error</h4>
+                        <p className="text-sm text-foreground">{swapError}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}

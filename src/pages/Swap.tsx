@@ -1,49 +1,185 @@
+
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { useWallet } from '../contexts/WalletContext';
+import { useSwapKitClient } from '../hooks/useSwapKitClient';
+import { WalletConnectionModal } from '../components/WalletConnectionModal';
 import TokenSelector from '../components/TokenSelector';
 import { Input } from '../components/ui/input';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 
 const Swap = () => {
-  const { isConnected, walletAddress } = useWallet();
+  const { 
+    ready, 
+    connectedWallet, 
+    addresses, 
+    getSwapDetails, 
+    disconnectWallet,
+    loading,
+    error 
+  } = useSwapKitClient();
+  
+  const { toast } = useToast();
+  const [showWalletModal, setShowWalletModal] = useState(false);
   const [fromToken, setFromToken] = useState('BTC.BTC');
   const [toToken, setToToken] = useState('ETH.ETH');
   const [amount, setAmount] = useState('');
   const [estimatedOutput, setEstimatedOutput] = useState('');
+  const [swapLoading, setSwapLoading] = useState(false);
 
   const handleSwapTokens = () => {
+    const temp = fromToken;
     setFromToken(toToken);
-    setToToken(fromToken);
+    setToToken(temp);
     setEstimatedOutput(''); // Clear estimate when swapping
   };
 
-  const handleEstimate = () => {
-    // Simulación de estimación
-    if (amount) {
-      const rate = 15.5; // Rate simulado
-      setEstimatedOutput((parseFloat(amount) * rate).toFixed(6));
+  const handleEstimate = async () => {
+    if (!amount || !ready) {
+      toast({
+        title: "Error",
+        description: "Ingresa una cantidad válida",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!connectedWallet) {
+      toast({
+        title: "Wallet requerida",
+        description: "Conecta tu wallet para obtener estimaciones",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      setSwapLoading(true);
+      
+      // Get destination address from connected wallet
+      const toChain = toToken.split('.')[0];
+      const destinationAddress = addresses[toChain];
+      
+      if (!destinationAddress) {
+        throw new Error(`No se encontró dirección para ${toChain}`);
+      }
+
+      const details = await getSwapDetails({
+        fromAsset: fromToken,
+        toAsset: toToken,
+        amount,
+        destinationAddress
+      });
+
+      if (details?.expectedOutput) {
+        setEstimatedOutput(details.expectedOutput);
+        toast({
+          title: "Estimación obtenida",
+          description: `Recibirás aproximadamente ${details.expectedOutput}`,
+        });
+      }
+      
+    } catch (error) {
+      console.error('Error getting estimate:', error);
+      toast({
+        title: "Error en estimación",
+        description: error instanceof Error ? error.message : "No se pudo obtener la estimación",
+        variant: "destructive"
+      });
+    } finally {
+      setSwapLoading(false);
     }
   };
 
-  if (!isConnected) {
+  const handleExecuteSwap = async () => {
+    toast({
+      title: "Función en desarrollo",
+      description: "La ejecución automática de swaps estará disponible pronto. Usa el modo manual mientras tanto.",
+    });
+  };
+
+  // Show loading if SwapKit is not ready
+  if (!ready && !error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="animate-pulse text-center">
+          <div className="h-8 bg-muted rounded w-48 mb-4 mx-auto"></div>
+          <div className="h-4 bg-muted rounded w-32 mx-auto"></div>
+          <p className="text-muted-foreground mt-2">Inicializando SwapKit...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error if SwapKit failed to initialize
+  if (error && !ready) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center"
+          className="text-center max-w-md"
+        >
+          <div className="text-6xl mb-6">⚠️</div>
+          <h2 className="text-2xl font-bold text-foreground mb-4">
+            Error de inicialización
+          </h2>
+          <p className="text-muted-foreground mb-8">
+            {error}
+          </p>
+          <Button onClick={() => window.location.reload()}>
+            Reintentar
+          </Button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // Show connect wallet screen if not connected
+  if (!connectedWallet) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center max-w-md"
         >
           <div className="text-6xl mb-6">🔒</div>
           <h2 className="text-2xl font-bold text-foreground mb-4">
             Conecta tu wallet para continuar
           </h2>
           <p className="text-muted-foreground mb-8">
-            Necesitas conectar una wallet para usar la función de swap
+            Necesitas conectar una wallet compatible con SwapKit para usar la función de swap automático
           </p>
-          <button className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors">
+          <Button
+            onClick={() => setShowWalletModal(true)}
+            size="lg"
+          >
             Conectar Wallet
-          </button>
+          </Button>
+          
+          <div className="mt-6 text-sm text-muted-foreground">
+            <p>¿Prefieres no conectar tu wallet?</p>
+            <Button 
+              variant="link" 
+              onClick={() => window.location.href = '/manual-swap'}
+              className="mt-2"
+            >
+              Usar modo manual →
+            </Button>
+          </div>
         </motion.div>
+
+        <WalletConnectionModal
+          isOpen={showWalletModal}
+          onClose={() => setShowWalletModal(false)}
+          onSuccess={() => {
+            toast({
+              title: "¡Wallet conectada!",
+              description: "Ahora puedes realizar swaps automáticos",
+            });
+          }}
+        />
       </div>
     );
   }
@@ -69,6 +205,32 @@ const Swap = () => {
           </p>
         </motion.div>
 
+        {/* Wallet Info */}
+        <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-primary">Wallet Conectada: {connectedWallet}</p>
+              <div className="text-sm text-muted-foreground mt-1">
+                {Object.entries(addresses).map(([chain, address]) => (
+                  <div key={chain} className="flex items-center space-x-2">
+                    <span className="font-medium">{chain}:</span>
+                    <span className="font-mono text-xs">
+                      {address.slice(0, 8)}...{address.slice(-8)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={disconnectWallet}
+            >
+              Desconectar
+            </Button>
+          </div>
+        </div>
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -90,10 +252,12 @@ const Swap = () => {
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0.0"
                 className="text-right text-xl font-bold"
+                step="any"
+                min="0"
               />
               <div className="flex justify-between mt-2 text-sm text-muted-foreground">
-                <span>Balance: 1.25 {getTickerFromIdentifier(fromToken)}</span>
-                <span>≈ ${(parseFloat(amount || '0') * 45000).toFixed(2)}</span>
+                <span>Balance: -- {getTickerFromIdentifier(fromToken)}</span>
+                <span>≈ $--</span>
               </div>
             </div>
           </div>
@@ -128,20 +292,21 @@ const Swap = () => {
               />
               <div className="flex justify-between mt-2 text-sm text-muted-foreground">
                 <span>Estimado</span>
-                <span>≈ ${(parseFloat(estimatedOutput || '0') * 2500).toFixed(2)}</span>
+                <span>≈ $--</span>
               </div>
             </div>
           </div>
 
           {/* Action Buttons */}
           <div className="space-y-3">
-            <button
+            <Button
               onClick={handleEstimate}
-              disabled={!amount}
-              className="w-full py-3 bg-secondary text-secondary-foreground rounded-lg font-semibold hover:bg-secondary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!amount || swapLoading || loading}
+              className="w-full"
+              variant="secondary"
             >
-              Estimar Swap
-            </button>
+              {swapLoading ? 'Estimando...' : 'Estimar Swap'}
+            </Button>
             
             {estimatedOutput && (
               <motion.div
@@ -153,11 +318,11 @@ const Swap = () => {
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Comisión de red:</span>
-                      <span className="text-foreground">~$2.50</span>
+                      <span className="text-foreground">Variable</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Slippage:</span>
-                      <span className="text-foreground">0.5%</span>
+                      <span className="text-foreground">3%</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Tiempo estimado:</span>
@@ -166,9 +331,13 @@ const Swap = () => {
                   </div>
                 </div>
                 
-                <button className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors">
-                  Confirmar Swap
-                </button>
+                <Button 
+                  onClick={handleExecuteSwap}
+                  className="w-full"
+                  disabled={loading}
+                >
+                  Ejecutar Swap (Próximamente)
+                </Button>
               </motion.div>
             )}
           </div>
