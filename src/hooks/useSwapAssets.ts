@@ -78,7 +78,7 @@ export const useSwapAssets = () => {
         }
       }
       
-      // Enhanced fallback with more comprehensive token list
+      // Enhanced fallback with comprehensive and correct token list
       console.log('Using enhanced fallback mock data');
       const mockAssets: SwapAsset[] = [
         { 

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSwapAssets } from '../hooks/useSwapAssets';
@@ -7,7 +8,7 @@ import { SwapProgress } from '../components/SwapProgress';
 import TokenSelector from '../components/TokenSelector';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 
 const ManualSwap = () => {
   const { assets, loading: assetsLoading, error: assetsError, refreshAssets } = useSwapAssets();
@@ -69,6 +70,11 @@ const ManualSwap = () => {
           recipient: destinationAddress
         });
         setCurrentStep('confirmation');
+        
+        toast({
+          title: "Cotización obtenida",
+          description: `Recibirás aproximadamente ${details.expectedOutput} ${toAsset?.ticker}`,
+        });
       }
     } catch (error) {
       console.error('Error getting swap details:', error);
@@ -103,10 +109,10 @@ const ManualSwap = () => {
   if (assetsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="animate-pulse text-center">
-          <div className="h-8 bg-muted rounded w-48 mb-4 mx-auto"></div>
-          <div className="h-4 bg-muted rounded w-32 mx-auto"></div>
-          <p className="text-muted-foreground mt-2">Cargando tokens disponibles...</p>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <h2 className="text-xl font-bold text-foreground mb-2">Cargando tokens...</h2>
+          <p className="text-muted-foreground">Obteniendo lista de tokens disponibles</p>
         </div>
       </div>
     );
@@ -120,8 +126,9 @@ const ManualSwap = () => {
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-foreground mb-2">Error al cargar tokens</h2>
           <p className="text-muted-foreground mb-4">{assetsError}</p>
-          <Button onClick={refreshAssets}>
-            Reintentar
+          <Button onClick={refreshAssets} className="flex items-center space-x-2">
+            <RefreshCw className="w-4 h-4" />
+            <span>Reintentar</span>
           </Button>
         </div>
       </div>
@@ -192,6 +199,22 @@ const ManualSwap = () => {
                   excludeToken={toToken}
                 />
 
+                {/* Swap Button */}
+                <div className="flex justify-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const temp = fromToken;
+                      setFromToken(toToken);
+                      setToToken(temp);
+                    }}
+                    className="rounded-full p-2"
+                  >
+                    ↕️
+                  </Button>
+                </div>
+
                 {/* To Token */}
                 <TokenSelector
                   value={toToken}
@@ -210,7 +233,7 @@ const ManualSwap = () => {
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     placeholder={`0.0 ${assets.find(a => a.identifier === fromToken)?.ticker || ''}`}
-                    className="w-full bg-background border border-border rounded-lg px-4 py-3 text-foreground placeholder-muted-foreground"
+                    className="w-full bg-background border border-border rounded-lg px-4 py-3 text-foreground placeholder-muted-foreground text-lg font-mono"
                     step="any"
                     min="0"
                   />
@@ -228,6 +251,9 @@ const ManualSwap = () => {
                     placeholder={`Tu dirección de ${assets.find(a => a.identifier === toToken)?.ticker}`}
                     className="w-full bg-background border border-border rounded-lg px-4 py-3 text-foreground placeholder-muted-foreground font-mono text-sm"
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Asegúrate de que la dirección sea correcta. Las transacciones son irreversibles.
+                  </p>
                 </div>
 
                 {/* Generate Button */}
@@ -237,7 +263,14 @@ const ManualSwap = () => {
                   className="w-full"
                   size="lg"
                 >
-                  {swapLoading ? 'Obteniendo cotización...' : 'Obtener Cotización'}
+                  {swapLoading ? (
+                    <div className="flex items-center space-x-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <span>Obteniendo cotización...</span>
+                    </div>
+                  ) : (
+                    'Obtener Cotización'
+                  )}
                 </Button>
 
                 {/* Swap Error */}
@@ -254,11 +287,14 @@ const ManualSwap = () => {
                 )}
 
                 {/* Debug info */}
-                {assets.length > 0 && (
-                  <div className="text-xs text-muted-foreground">
-                    {assets.length} tokens cargados
-                  </div>
-                )}
+                <div className="text-xs text-muted-foreground text-center">
+                  {assets.length} tokens disponibles
+                  {assetsError && (
+                    <span className="ml-2 text-yellow-600">
+                      (usando datos de prueba)
+                    </span>
+                  )}
+                </div>
               </div>
             </motion.div>
           )}

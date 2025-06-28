@@ -12,11 +12,13 @@ interface SwapConfirmationProps {
     expectedOutput: string;
     expiresIn: number;
     provider?: string;
-    estimatedTime?: string;
+    estimatedTime?: string | object;
     fromAsset: any;
     toAsset: any;
     exactAmount: string;
     recipient: string;
+    fees?: any[];
+    priceImpact?: number;
   };
   onConfirm: (txHash: string) => void;
   onBack: () => void;
@@ -60,6 +62,25 @@ export const SwapConfirmation: React.FC<SwapConfirmationProps> = ({
   };
 
   const expiryMinutes = Math.floor(swapDetails.expiresIn / 60);
+
+  // Format estimated time - handle both string and object formats
+  const formatEstimatedTime = (estimatedTime: string | object | undefined) => {
+    if (!estimatedTime) return '5-10 minutos';
+    
+    if (typeof estimatedTime === 'string') {
+      return estimatedTime;
+    }
+    
+    if (typeof estimatedTime === 'object' && estimatedTime !== null) {
+      const timeObj = estimatedTime as any;
+      if (timeObj.total) {
+        const totalMinutes = Math.ceil(timeObj.total / 60);
+        return `~${totalMinutes} minutos`;
+      }
+    }
+    
+    return '5-10 minutos';
+  };
 
   return (
     <div className="bg-card border border-border rounded-2xl p-6 shadow-lg">
@@ -136,17 +157,33 @@ export const SwapConfirmation: React.FC<SwapConfirmationProps> = ({
           </div>
         </div>
 
-        {/* Provider Info */}
-        {swapDetails.provider && (
-          <div className="flex items-center justify-center space-x-2 text-sm text-muted-foreground">
-            <Shield className="w-4 h-4" />
-            <span>Proveedor: {swapDetails.provider}</span>
-            {swapDetails.estimatedTime && (
-              <>
-                <span>•</span>
-                <span>Tiempo estimado: {swapDetails.estimatedTime}</span>
-              </>
-            )}
+        {/* Provider and Time Info */}
+        <div className="flex items-center justify-center space-x-4 text-sm text-muted-foreground">
+          {swapDetails.provider && (
+            <div className="flex items-center space-x-2">
+              <Shield className="w-4 h-4" />
+              <span>Proveedor: {swapDetails.provider}</span>
+            </div>
+          )}
+          <div className="flex items-center space-x-2">
+            <Clock className="w-4 h-4" />
+            <span>Tiempo estimado: {formatEstimatedTime(swapDetails.estimatedTime)}</span>
+          </div>
+        </div>
+
+        {/* Price Impact Warning */}
+        {swapDetails.priceImpact && Math.abs(swapDetails.priceImpact) > 1 && (
+          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
+            <div className="flex items-start space-x-3">
+              <div className="text-yellow-600 text-xl">⚠️</div>
+              <div>
+                <h4 className="font-semibold text-yellow-600 mb-1">Impacto en el precio</h4>
+                <p className="text-sm text-foreground">
+                  Este swap tiene un impacto del {Math.abs(swapDetails.priceImpact).toFixed(2)}% en el precio. 
+                  Considera dividir la operación en partes más pequeñas.
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -218,6 +255,26 @@ export const SwapConfirmation: React.FC<SwapConfirmationProps> = ({
             </div>
           )}
         </div>
+
+        {/* Fees Information */}
+        {swapDetails.fees && swapDetails.fees.length > 0 && (
+          <div className="bg-muted/50 rounded-lg p-4">
+            <h4 className="font-semibold text-foreground mb-2">Comisiones estimadas:</h4>
+            <div className="space-y-1">
+              {swapDetails.fees.slice(0, 3).map((fee: any, index: number) => (
+                <div key={index} className="flex justify-between text-sm">
+                  <span className="text-muted-foreground capitalize">{fee.type}:</span>
+                  <span className="font-mono">{fee.amount} {fee.asset?.split('.')[1] || fee.asset}</span>
+                </div>
+              ))}
+              {swapDetails.fees.length > 3 && (
+                <div className="text-sm text-muted-foreground">
+                  +{swapDetails.fees.length - 3} comisiones más...
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Recipient Address */}
         <div className="bg-muted/50 rounded-lg p-4">

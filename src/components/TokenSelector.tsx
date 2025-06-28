@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Search } from 'lucide-react';
+import { ChevronDown, Search, AlertCircle } from 'lucide-react';
 import { useSwapAssets } from '../hooks/useSwapAssets';
 
 interface TokenSelectorProps {
@@ -21,14 +21,20 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const selectedAsset = assets.find(asset => asset.identifier === value || asset.ticker === value);
+  const selectedAsset = assets.find(asset => 
+    asset.identifier === value || 
+    asset.ticker === value ||
+    asset.symbol === value
+  );
   
   const filteredAssets = assets.filter(asset => 
     asset.identifier !== excludeToken &&
     asset.ticker !== excludeToken &&
+    asset.symbol !== excludeToken &&
     (asset.ticker.toLowerCase().includes(searchTerm.toLowerCase()) ||
      asset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     asset.chain.toLowerCase().includes(searchTerm.toLowerCase()))
+     asset.chain.toLowerCase().includes(searchTerm.toLowerCase()) ||
+     asset.identifier.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   if (loading) {
@@ -50,7 +56,7 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
       
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full bg-background rounded-lg p-4 border border-border flex justify-between items-center hover:border-primary/50 transition-colors"
+        className="w-full bg-background rounded-lg p-4 border border-border flex justify-between items-center hover:border-primary/50 transition-colors group"
       >
         <div className="flex items-center space-x-3">
           {selectedAsset?.logoURI ? (
@@ -69,11 +75,15 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
             {selectedAsset?.ticker?.charAt(0) || '?'}
           </div>
           <div className="text-left">
-            <div className="font-semibold text-foreground">{selectedAsset?.ticker || 'Seleccionar Token'}</div>
-            <div className="text-sm text-muted-foreground">{selectedAsset?.chain}</div>
+            <div className="font-semibold text-foreground group-hover:text-primary transition-colors">
+              {selectedAsset?.ticker || 'Seleccionar Token'}
+            </div>
+            <div className="text-sm text-muted-foreground">
+              {selectedAsset?.name || selectedAsset?.chain || 'Selecciona un token'}
+            </div>
           </div>
         </div>
-        <ChevronDown className={`w-5 h-5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-5 h-5 transition-transform text-muted-foreground group-hover:text-primary ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       <AnimatePresence>
@@ -93,46 +103,60 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  autoFocus
                 />
               </div>
             </div>
             
             <div className="max-h-60 overflow-y-auto">
-              {filteredAssets.map((asset) => (
-                <button
-                  key={asset.identifier}
-                  onClick={() => {
-                    onChange(asset.identifier);
-                    setIsOpen(false);
-                    setSearchTerm('');
-                  }}
-                  className="w-full p-3 hover:bg-accent flex items-center space-x-3 transition-colors"
-                >
-                  {asset.logoURI ? (
-                    <img 
-                      src={asset.logoURI} 
-                      alt={asset.name || asset.ticker}
-                      className="w-8 h-8 rounded-full"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = 'none';
-                        target.nextElementSibling?.classList.remove('hidden');
-                      }}
-                    />
-                  ) : null}
-                  <div className={`w-8 h-8 rounded-full bg-gradient-to-r from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold text-sm ${asset.logoURI ? 'hidden' : ''}`}>
-                    {asset.ticker?.charAt(0) || '?'}
-                  </div>
-                  <div className="text-left">
-                    <div className="font-medium text-foreground">{asset.ticker}</div>
-                    <div className="text-sm text-muted-foreground">{asset.name} • {asset.chain}</div>
-                  </div>
-                </button>
-              ))}
-              
-              {filteredAssets.length === 0 && (
-                <div className="p-4 text-center text-muted-foreground text-sm">
-                  No se encontraron tokens
+              {filteredAssets.length > 0 ? (
+                filteredAssets.map((asset) => (
+                  <button
+                    key={asset.identifier}
+                    onClick={() => {
+                      onChange(asset.identifier);
+                      setIsOpen(false);
+                      setSearchTerm('');
+                    }}
+                    className="w-full p-3 hover:bg-accent flex items-center space-x-3 transition-colors group"
+                  >
+                    {asset.logoURI ? (
+                      <img 
+                        src={asset.logoURI} 
+                        alt={asset.name || asset.ticker}
+                        className="w-8 h-8 rounded-full"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          target.nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    <div className={`w-8 h-8 rounded-full bg-gradient-to-r from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold text-sm ${asset.logoURI ? 'hidden' : ''}`}>
+                      {asset.ticker?.charAt(0) || '?'}
+                    </div>
+                    <div className="text-left flex-1">
+                      <div className="font-medium text-foreground group-hover:text-primary transition-colors">
+                        {asset.ticker}
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {asset.name} • {asset.chain}
+                      </div>
+                    </div>
+                    <div className="text-xs text-muted-foreground font-mono">
+                      {asset.decimals} dec
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="p-4 text-center">
+                  <AlertCircle className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-muted-foreground text-sm">
+                    No se encontraron tokens
+                  </p>
+                  <p className="text-muted-foreground text-xs mt-1">
+                    Prueba con otro término de búsqueda
+                  </p>
                 </div>
               )}
             </div>
@@ -143,7 +167,10 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
       {isOpen && (
         <div 
           className="fixed inset-0 z-40" 
-          onClick={() => setIsOpen(false)}
+          onClick={() => {
+            setIsOpen(false);
+            setSearchTerm('');
+          }}
         />
       )}
     </div>
