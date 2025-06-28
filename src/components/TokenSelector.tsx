@@ -56,10 +56,9 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
           {selectedAsset?.logoURI ? (
             <img 
               src={selectedAsset.logoURI} 
-              alt={selectedAsset.name}
+              alt={selectedAsset.name || selectedAsset.ticker}
               className="w-8 h-8 rounded-full"
               onError={(e) => {
-                // Fallback if image fails to load
                 const target = e.target as HTMLImageElement;
                 target.style.display = 'none';
                 target.nextElementSibling?.classList.remove('hidden');
@@ -67,10 +66,10 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
             />
           ) : null}
           <div className={`w-8 h-8 rounded-full bg-gradient-to-r from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold text-sm ${selectedAsset?.logoURI ? 'hidden' : ''}`}>
-            {selectedAsset?.ticker.charAt(0) || '?'}
+            {selectedAsset?.ticker?.charAt(0) || '?'}
           </div>
           <div className="text-left">
-            <div className="font-semibold text-foreground">{selectedAsset?.ticker || 'Select'}</div>
+            <div className="font-semibold text-foreground">{selectedAsset?.ticker || 'Seleccionar Token'}</div>
             <div className="text-sm text-muted-foreground">{selectedAsset?.chain}</div>
           </div>
         </div>
@@ -90,7 +89,7 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   type="text"
-                  placeholder="Search tokens..."
+                  placeholder="Buscar tokens..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -112,7 +111,7 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
                   {asset.logoURI ? (
                     <img 
                       src={asset.logoURI} 
-                      alt={asset.name}
+                      alt={asset.name || asset.ticker}
                       className="w-8 h-8 rounded-full"
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
@@ -122,7 +121,7 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
                     />
                   ) : null}
                   <div className={`w-8 h-8 rounded-full bg-gradient-to-r from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold text-sm ${asset.logoURI ? 'hidden' : ''}`}>
-                    {asset.ticker.charAt(0)}
+                    {asset.ticker?.charAt(0) || '?'}
                   </div>
                   <div className="text-left">
                     <div className="font-medium text-foreground">{asset.ticker}</div>
@@ -133,7 +132,7 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
               
               {filteredAssets.length === 0 && (
                 <div className="p-4 text-center text-muted-foreground text-sm">
-                  No tokens found
+                  No se encontraron tokens
                 </div>
               )}
             </div>

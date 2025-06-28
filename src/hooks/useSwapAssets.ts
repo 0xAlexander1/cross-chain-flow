@@ -11,7 +11,7 @@ interface SwapAsset {
   symbol: string;
   name: string;
   decimals: number;
-  logoURI: string;
+  logoURI?: string;
   coingeckoId?: string;
   address?: string;
 }
@@ -40,8 +40,22 @@ export const useSwapAssets = () => {
         const backendAssets = await getBackendAssets();
         
         if (backendAssets && Array.isArray(backendAssets) && backendAssets.length > 0) {
-          setAssets(backendAssets);
-          console.log(`Loaded ${backendAssets.length} tokens from backend`);
+          // Transform backend assets to match our interface
+          const transformedAssets = backendAssets.map((asset: any) => ({
+            chain: asset.chain || 'Unknown',
+            chainId: asset.chainId || asset.chain,
+            ticker: asset.symbol || asset.ticker,
+            identifier: asset.symbol || asset.identifier || `${asset.chain}.${asset.symbol}`,
+            symbol: asset.symbol || asset.ticker,
+            name: asset.name || asset.symbol,
+            decimals: asset.decimals || 18,
+            logoURI: asset.logoURI,
+            coingeckoId: asset.coingeckoId,
+            address: asset.address
+          }));
+          
+          setAssets(transformedAssets);
+          console.log(`Loaded ${transformedAssets.length} tokens from backend`);
           return;
         }
       } catch (backendError) {
@@ -64,8 +78,8 @@ export const useSwapAssets = () => {
         }
       }
       
-      // Fallback to mock data
-      console.log('Using fallback mock data');
+      // Enhanced fallback with more tokens and proper image URLs
+      console.log('Using enhanced fallback mock data');
       const mockAssets: SwapAsset[] = [
         { 
           chain: 'BTC', 
@@ -101,6 +115,17 @@ export const useSwapAssets = () => {
           address: '0xdAC17F958D2ee523a2206206994597C13D831ec7'
         },
         { 
+          chain: 'ETH', 
+          chainId: '1',
+          ticker: 'USDC',
+          identifier: 'ETH.USDC-0XA0B86A33E6441E6C8D089D6C22013C4B8D6F4F6A',
+          symbol: 'USDC', 
+          name: 'USD Coin', 
+          decimals: 6,
+          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/eth.usdc-0xa0b86a33e6441e6c8d089d6c22013c4b8d6f4f6a.png',
+          address: '0xA0b86a33E6441E6C8D089D6C22013C4B8D6F4F6A'
+        },
+        { 
           chain: 'AVAX', 
           chainId: '43114',
           ticker: 'AVAX',
@@ -121,11 +146,33 @@ export const useSwapAssets = () => {
           decimals: 18,
           logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/bsc.bnb.png',
           coingeckoId: 'binancecoin'
+        },
+        { 
+          chain: 'DOGE', 
+          chainId: 'dogecoin',
+          ticker: 'DOGE',
+          identifier: 'DOGE.DOGE',
+          symbol: 'DOGE', 
+          name: 'Dogecoin', 
+          decimals: 8,
+          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/doge.doge.png',
+          coingeckoId: 'dogecoin'
+        },
+        { 
+          chain: 'LTC', 
+          chainId: 'litecoin',
+          ticker: 'LTC',
+          identifier: 'LTC.LTC',
+          symbol: 'LTC', 
+          name: 'Litecoin', 
+          decimals: 8,
+          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/ltc.ltc.png',
+          coingeckoId: 'litecoin'
         }
       ];
       
       setAssets(mockAssets);
-      setError('Using fallback data - backend and SwapKit client unavailable');
+      setError('Usando datos de prueba - backend y SwapKit client no disponibles');
       
     } catch (err) {
       console.error('Error fetching swap assets:', err);

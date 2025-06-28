@@ -5,6 +5,7 @@ import { useSwapAssets } from '../hooks/useSwapAssets';
 import { useSwapKit } from '../hooks/useSwapKit';
 import { SwapConfirmation } from '../components/SwapConfirmation';
 import { SwapProgress } from '../components/SwapProgress';
+import TokenSelector from '../components/TokenSelector';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { AlertCircle } from 'lucide-react';
@@ -19,7 +20,7 @@ const ManualSwap = () => {
   const [amount, setAmount] = useState('');
   const [destinationAddress, setDestinationAddress] = useState('');
   const [swapDetails, setSwapDetails] = useState(null);
-  const [currentStep, setCurrentStep] = useState('form'); // 'form', 'confirmation', 'progress'
+  const [currentStep, setCurrentStep] = useState('form');
   const [txHash, setTxHash] = useState('');
 
   const handleGetSwapDetails = async () => {
@@ -32,7 +33,6 @@ const ManualSwap = () => {
       return;
     }
 
-    // Basic validation
     if (parseFloat(amount) <= 0) {
       toast({
         title: "Cantidad inválida",
@@ -184,74 +184,22 @@ const ManualSwap = () => {
               )}
 
               {/* Form */}
-              <div className="space-y-4">
+              <div className="space-y-6">
                 {/* From Token */}
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Token de origen
-                  </label>
-                  <select
-                    value={fromToken}
-                    onChange={(e) => setFromToken(e.target.value)}
-                    className="w-full bg-background border border-border rounded-lg px-4 py-3 text-foreground"
-                  >
-                    {assets.map((asset) => (
-                      <option key={`from-${asset.identifier}`} value={asset.identifier}>
-                        {asset.ticker} - {asset.chain}
-                      </option>
-                    ))}
-                  </select>
-                  {assets.find(a => a.identifier === fromToken)?.logoURI && (
-                    <div className="flex items-center space-x-2 mt-2">
-                      <img 
-                        src={assets.find(a => a.identifier === fromToken)?.logoURI} 
-                        alt={assets.find(a => a.identifier === fromToken)?.name}
-                        className="w-6 h-6 rounded-full"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                        }}
-                      />
-                      <span className="text-sm text-muted-foreground">
-                        {assets.find(a => a.identifier === fromToken)?.name}
-                      </span>
-                    </div>
-                  )}
-                </div>
+                <TokenSelector
+                  value={fromToken}
+                  onChange={setFromToken}
+                  label="Token de origen"
+                  excludeToken={toToken}
+                />
 
                 {/* To Token */}
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Token de destino
-                  </label>
-                  <select
-                    value={toToken}
-                    onChange={(e) => setToToken(e.target.value)}
-                    className="w-full bg-background border border-border rounded-lg px-4 py-3 text-foreground"
-                  >
-                    {assets.filter(asset => asset.identifier !== fromToken).map((asset) => (
-                      <option key={`to-${asset.identifier}`} value={asset.identifier}>
-                        {asset.ticker} - {asset.chain}
-                      </option>
-                    ))}
-                  </select>
-                  {assets.find(a => a.identifier === toToken)?.logoURI && (
-                    <div className="flex items-center space-x-2 mt-2">
-                      <img 
-                        src={assets.find(a => a.identifier === toToken)?.logoURI} 
-                        alt={assets.find(a => a.identifier === toToken)?.name}
-                        className="w-6 h-6 rounded-full"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                        }}
-                      />
-                      <span className="text-sm text-muted-foreground">
-                        {assets.find(a => a.identifier === toToken)?.name}
-                      </span>
-                    </div>
-                  )}
-                </div>
+                <TokenSelector
+                  value={toToken}
+                  onChange={setToToken}
+                  label="Token de destino"
+                  excludeToken={fromToken}
+                />
 
                 {/* Amount */}
                 <div>
@@ -303,6 +251,13 @@ const ManualSwap = () => {
                         <p className="text-sm text-foreground">{swapError}</p>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* Debug info */}
+                {assets.length > 0 && (
+                  <div className="text-xs text-muted-foreground">
+                    {assets.length} tokens cargados
                   </div>
                 )}
               </div>
