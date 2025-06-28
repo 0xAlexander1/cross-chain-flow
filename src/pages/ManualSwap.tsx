@@ -196,7 +196,7 @@ const ManualSwap = () => {
                     className="w-full bg-background border border-border rounded-lg px-4 py-3 text-foreground"
                   >
                     {assets.map((asset) => (
-                      <option key={asset.identifier} value={asset.identifier}>
+                      <option key={`from-${asset.identifier}`} value={asset.identifier}>
                         {asset.ticker} - {asset.chain}
                       </option>
                     ))}
@@ -230,7 +230,7 @@ const ManualSwap = () => {
                     className="w-full bg-background border border-border rounded-lg px-4 py-3 text-foreground"
                   >
                     {assets.filter(asset => asset.identifier !== fromToken).map((asset) => (
-                      <option key={asset.identifier} value={asset.identifier}>
+                      <option key={`to-${asset.identifier}`} value={asset.identifier}>
                         {asset.ticker} - {asset.chain}
                       </option>
                     ))}

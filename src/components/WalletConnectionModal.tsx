@@ -1,10 +1,8 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { WalletOption } from '@swapkit/core';
 import { useSwapKitClient } from '../hooks/useSwapKitClient';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 
 interface WalletConnectionModalProps {
@@ -20,50 +18,37 @@ export const WalletConnectionModal: React.FC<WalletConnectionModalProps> = ({
 }) => {
   const { connectWallet, supportedWallets, loading } = useSwapKitClient();
   const { toast } = useToast();
-  const [selectedWallet, setSelectedWallet] = useState<WalletOption | null>(null);
+  const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
   const [seedPhrase, setSeedPhrase] = useState('');
   const [showSeedInput, setShowSeedInput] = useState(false);
 
-  const walletInfo = {
-    [WalletOption.XDEFI]: {
+  const walletInfo: Record<string, {
+    name: string;
+    icon: string;
+    description: string;
+    requiresSeed: boolean;
+  }> = {
+    'XDEFI': {
       name: 'XDEFI Wallet',
       icon: '🛡️',
       description: 'Multi-chain web3 wallet',
       requiresSeed: false
     },
-    [WalletOption.KEYSTORE]: {
+    'KEYSTORE': {
       name: 'Keystore',
       icon: '🔐',
       description: 'Connect with seed phrase',
       requiresSeed: true
     },
-    [WalletOption.WALLETCONNECT]: {
-      name: 'WalletConnect',
-      icon: '🔗',
-      description: 'Scan QR code',
-      requiresSeed: false
-    },
-    [WalletOption.LEDGER]: {
-      name: 'Ledger',
-      icon: '📱',
-      description: 'Hardware wallet',
-      requiresSeed: false
-    },
-    [WalletOption.TREZOR]: {
-      name: 'Trezor',
-      icon: '🔒',
-      description: 'Hardware wallet',
-      requiresSeed: false
-    },
-    [WalletOption.KEEPKEY]: {
-      name: 'KeepKey',
-      icon: '🔑',
-      description: 'Hardware wallet',
+    'METAMASK': {
+      name: 'MetaMask',
+      icon: '🦊',
+      description: 'Ethereum wallet',
       requiresSeed: false
     }
   };
 
-  const handleWalletSelect = (walletType: WalletOption) => {
+  const handleWalletSelect = (walletType: string) => {
     const wallet = walletInfo[walletType];
     if (wallet?.requiresSeed) {
       setSelectedWallet(walletType);
@@ -73,7 +58,7 @@ export const WalletConnectionModal: React.FC<WalletConnectionModalProps> = ({
     }
   };
 
-  const handleConnect = async (walletType: WalletOption, options?: any) => {
+  const handleConnect = async (walletType: string, options?: any) => {
     try {
       await connectWallet(walletType, options);
       
@@ -105,7 +90,7 @@ export const WalletConnectionModal: React.FC<WalletConnectionModalProps> = ({
       return;
     }
 
-    handleConnect(WalletOption.KEYSTORE, { phrase: seedPhrase.trim() });
+    handleConnect('KEYSTORE', { phrase: seedPhrase.trim() });
   };
 
   const resetModal = () => {
