@@ -1,37 +1,45 @@
-
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSwapKitClient } from '../hooks/useSwapKitClient';
+import { useSwapKit } from '../hooks/useSwapKit';
 import { WalletConnectionModal } from '../components/WalletConnectionModal';
+import { SwapConfirmation } from '../components/SwapConfirmation';
+import { SwapProgress } from '../components/SwapProgress';
+import ProviderComparison from '../components/ProviderComparison';
 import TokenSelector from '../components/TokenSelector';
 import { Input } from '../components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { useSwapAssets } from '../hooks/useSwapAssets';
 
 const Swap = () => {
   const { 
     ready, 
     connectedWallet, 
     addresses, 
-    getSwapDetails, 
     disconnectWallet,
     loading,
     error 
   } = useSwapKitClient();
   
+  const { getSwapDetails, getSwapStatus } = useSwapKit();
+  const { assets } = useSwapAssets();
   const { toast } = useToast();
+  
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [fromToken, setFromToken] = useState('BTC.BTC');
   const [toToken, setToToken] = useState('ETH.ETH');
   const [amount, setAmount] = useState('');
-  const [estimatedOutput, setEstimatedOutput] = useState('');
+  const [swapRoutes, setSwapRoutes] = useState(null);
+  const [selectedRoute, setSelectedRoute] = useState(null);
+  const [currentStep, setCurrentStep] = useState('form');
+  const [txHash, setTxHash] = useState('');
   const [swapLoading, setSwapLoading] = useState(false);
 
   const handleSwapTokens = () => {
     const temp = fromToken;
     setFromToken(toToken);
     setToToken(temp);
-    setEstimatedOutput(''); // Clear estimate when swapping
   };
 
   const handleEstimate = async () => {
@@ -64,19 +72,37 @@ const Swap = () => {
         throw new Error(`No se encontró dirección para ${toChain}`);
       }
 
-      const details = await getSwapDetails({
-        fromAsset: fromToken,
-        toAsset: toToken,
-        amount,
-        destinationAddress
-      });
+      const details = await getSwapDetails(fromToken, toToken, amount, destinationAddress);
 
-      if (details?.expectedOutput) {
-        setEstimatedOutput(details.expectedOutput);
-        toast({
-          title: "Estimación obtenida",
-          description: `Recibirás aproximadamente ${details.expectedOutput}`,
-        });
+      if (details && details.routes && details.routes.length > 0) {
+        setSwapRoutes(details);
+        
+        // If multiple routes, show comparison, otherwise go directly to confirmation
+        if (details.routes.length > 1) {
+          setCurrentStep('comparison');
+          toast({
+            title: "Múltiples proveedores disponibles",
+            description: `Encontramos ${details.routes.length} opciones para tu swap`,
+          });
+        } else {
+          // Single route, show details
+          const fromAsset = assets.find(asset => asset.identifier === fromToken);
+          const toAsset = assets.find(asset => asset.identifier === toToken);
+          
+          setSelectedRoute({
+            ...details.routes[0],
+            fromAsset,
+            toAsset,
+            exactAmount: amount,
+            recipient: destinationAddress
+          });
+          setCurrentStep('confirmation');
+          
+          toast({
+            title: "Estimación obtenida",
+            description: `Recibirás aproximadamente ${details.routes[0].expectedOutput} ${toAsset?.ticker}`,
+          });
+        }
       }
       
     } catch (error) {
@@ -91,11 +117,48 @@ const Swap = () => {
     }
   };
 
-  const handleExecuteSwap = async () => {
-    toast({
-      title: "Función en desarrollo",
-      description: "La ejecución automática de swaps estará disponible pronto. Usa el modo manual mientras tanto.",
+  const handleSelectProvider = (route: any) => {
+    const fromAsset = assets.find(asset => asset.identifier === fromToken);
+    const toAsset = assets.find(asset => asset.identifier === toToken);
+    
+    setSelectedRoute({
+      ...route,
+      fromAsset,
+      toAsset,
+      exactAmount: amount,
+      recipient: addresses[toToken.split('.')[0]]
     });
+    setCurrentStep('confirmation');
+    
+    toast({
+      title: "Proveedor seleccionado",
+      description: `Usando ${route.provider} para el swap`,
+    });
+  };
+
+  const handleConfirmSwap = (transactionHash: string) => {
+    setTxHash(transactionHash);
+    setCurrentStep('progress');
+  };
+
+  const handleBackToForm = () => {
+    setCurrentStep('form');
+    setSwapRoutes(null);
+    setSelectedRoute(null);
+    setTxHash('');
+  };
+
+  const handleBackToComparison = () => {
+    setCurrentStep('comparison');
+    setSelectedRoute(null);
+  };
+
+  const handleNewSwap = () => {
+    setCurrentStep('form');
+    setSwapRoutes(null);
+    setSelectedRoute(null);
+    setTxHash('');
+    setAmount('');
   };
 
   // Show loading if SwapKit is not ready
@@ -206,142 +269,178 @@ const Swap = () => {
         </motion.div>
 
         {/* Wallet Info */}
-        <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-semibold text-primary">Wallet Conectada: {connectedWallet}</p>
-              <div className="text-sm text-muted-foreground mt-1">
-                {Object.entries(addresses).map(([chain, address]) => (
-                  <div key={chain} className="flex items-center space-x-2">
-                    <span className="font-medium">{chain}:</span>
-                    <span className="font-mono text-xs">
-                      {address.slice(0, 8)}...{address.slice(-8)}
-                    </span>
-                  </div>
-                ))}
+        {connectedWallet && (
+          <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-semibold text-primary">Wallet Conectada: {connectedWallet}</p>
+                <div className="text-sm text-muted-foreground mt-1">
+                  {Object.entries(addresses).map(([chain, address]) => (
+                    <div key={chain} className="flex items-center space-x-2">
+                      <span className="font-medium">{chain}:</span>
+                      <span className="font-mono text-xs">
+                        {address.slice(0, 8)}...{address.slice(-8)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={disconnectWallet}
-            >
-              Desconectar
-            </Button>
-          </div>
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-card border border-border rounded-2xl p-6 shadow-lg"
-        >
-          {/* From Token */}
-          <div className="mb-4">
-            <TokenSelector
-              value={fromToken}
-              onChange={setFromToken}
-              label="Desde"
-              excludeToken={toToken}
-            />
-            <div className="mt-3">
-              <Input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.0"
-                className="text-right text-xl font-bold"
-                step="any"
-                min="0"
-              />
-              <div className="flex justify-between mt-2 text-sm text-muted-foreground">
-                <span>Balance: -- {getTickerFromIdentifier(fromToken)}</span>
-                <span>≈ $--</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Swap Button */}
-          <div className="flex justify-center my-6">
-            <button
-              onClick={handleSwapTokens}
-              className="p-3 rounded-full border border-border hover:bg-accent transition-all duration-200 hover:scale-110"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-              </svg>
-            </button>
-          </div>
-
-          {/* To Token */}
-          <div className="mb-6">
-            <TokenSelector
-              value={toToken}
-              onChange={setToToken}
-              label="Hacia"
-              excludeToken={fromToken}
-            />
-            <div className="mt-3">
-              <Input
-                type="text"
-                value={estimatedOutput}
-                placeholder="0.0"
-                readOnly
-                className="text-right text-xl font-bold bg-muted"
-              />
-              <div className="flex justify-between mt-2 text-sm text-muted-foreground">
-                <span>Estimado</span>
-                <span>≈ $--</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="space-y-3">
-            <Button
-              onClick={handleEstimate}
-              disabled={!amount || swapLoading || loading}
-              className="w-full"
-              variant="secondary"
-            >
-              {swapLoading ? 'Estimando...' : 'Estimar Swap'}
-            </Button>
-            
-            {estimatedOutput && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                className="space-y-3"
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={disconnectWallet}
               >
-                <div className="bg-background rounded-lg p-4 border border-border">
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Comisión de red:</span>
-                      <span className="text-foreground">Variable</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Slippage:</span>
-                      <span className="text-foreground">3%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Tiempo estimado:</span>
-                      <span className="text-foreground">2-5 min</span>
-                    </div>
+                Desconectar
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <AnimatePresence mode="wait">
+          {currentStep === 'form' && (
+            <motion.div
+              key="form"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-card border border-border rounded-2xl p-6 shadow-lg"
+            >
+              {/* From Token */}
+              <div className="mb-4">
+                <TokenSelector
+                  value={fromToken}
+                  onChange={setFromToken}
+                  label="Desde"
+                  excludeToken={toToken}
+                />
+                <div className="mt-3">
+                  <Input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0.0"
+                    className="text-right text-xl font-bold"
+                    step="any"
+                    min="0"
+                  />
+                  <div className="flex justify-between mt-2 text-sm text-muted-foreground">
+                    <span>Balance: -- {getTickerFromIdentifier(fromToken)}</span>
+                    <span>≈ $--</span>
                   </div>
                 </div>
-                
-                <Button 
-                  onClick={handleExecuteSwap}
-                  className="w-full"
-                  disabled={loading}
+              </div>
+
+              {/* Swap Button */}
+              <div className="flex justify-center my-6">
+                <button
+                  onClick={handleSwapTokens}
+                  className="p-3 rounded-full border border-border hover:bg-accent transition-all duration-200 hover:scale-110"
                 >
-                  Ejecutar Swap (Próximamente)
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* To Token */}
+              <div className="mb-6">
+                <TokenSelector
+                  value={toToken}
+                  onChange={setToToken}
+                  label="Hacia"
+                  excludeToken={fromToken}
+                />
+                <div className="mt-3">
+                  <Input
+                    type="text"
+                    value={swapRoutes?.bestRoute?.expectedOutput || ''}
+                    placeholder="0.0"
+                    readOnly
+                    className="text-right text-xl font-bold bg-muted"
+                  />
+                  <div className="flex justify-between mt-2 text-sm text-muted-foreground">
+                    <span>Estimado</span>
+                    <span>≈ $--</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-3">
+                <Button
+                  onClick={handleEstimate}
+                  disabled={!amount || swapLoading || loading || !connectedWallet}
+                  className="w-full"
+                  variant="secondary"
+                >
+                  {swapLoading ? 'Estimando...' : 'Estimar Swap'}
                 </Button>
-              </motion.div>
-            )}
-          </div>
-        </motion.div>
+              </div>
+            </motion.div>
+          )}
+
+          {currentStep === 'comparison' && swapRoutes && (
+            <motion.div
+              key="comparison"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+            >
+              <ProviderComparison
+                routes={swapRoutes.routes}
+                fromAsset={assets.find(asset => asset.identifier === fromToken)}
+                toAsset={assets.find(asset => asset.identifier === toToken)}
+                amount={amount}
+                onSelectProvider={handleSelectProvider}
+                onBack={handleBackToForm}
+              />
+            </motion.div>
+          )}
+
+          {currentStep === 'confirmation' && selectedRoute && (
+            <motion.div
+              key="confirmation"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+            >
+              <SwapConfirmation 
+                swapDetails={selectedRoute}
+                onConfirm={handleConfirmSwap}
+                onBack={swapRoutes && swapRoutes.routes.length > 1 ? handleBackToComparison : handleBackToForm}
+              />
+            </motion.div>
+          )}
+
+          {currentStep === 'progress' && (
+            <motion.div
+              key="progress"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+            >
+              <SwapProgress 
+                txHash={txHash}
+                swapDetails={selectedRoute}
+                onNewSwap={handleNewSwap}
+                getSwapStatus={getSwapStatus}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {!connectedWallet && (
+          <WalletConnectionModal
+            isOpen={showWalletModal}
+            onClose={() => setShowWalletModal(false)}
+            onSuccess={() => {
+              toast({
+                title: "¡Wallet conectada!",
+                description: "Ahora puedes realizar swaps automáticos",
+              });
+            }}
+          />
+        )}
       </div>
     </div>
   );

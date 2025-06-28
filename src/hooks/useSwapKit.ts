@@ -2,13 +2,23 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-interface SwapDetails {
+interface SwapRoute {
+  provider: string;
   depositAddress: string;
   memo: string;
   expectedOutput: string;
+  expectedOutputMaxSlippage: string;
+  fees: any[];
+  estimatedTime: string;
+  priceImpact: number;
+  warnings: string[];
+  totalFees: number;
+}
+
+interface SwapDetails {
+  routes: SwapRoute[];
   expiresIn: number;
-  provider?: string;
-  estimatedTime?: string;
+  bestRoute: SwapRoute;
 }
 
 interface SwapStatus {

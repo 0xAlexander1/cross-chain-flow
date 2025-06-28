@@ -59,7 +59,7 @@ serve(async (req) => {
         buyAsset: toAsset,
         sellAmount: amount,
         recipientAddress: recipient,
-        providers: ['MAYACHAIN', 'THORCHAIN', 'CHAINFLIP'] // Multiple providers in order of preference
+        providers: ['CHAINFLIP', 'THORCHAIN', 'MAYACHAIN'] // Multiple providers in order of preference
       })
     });
 
@@ -72,35 +72,72 @@ serve(async (req) => {
     const quoteData = await quoteResponse.json();
     console.log('Quote data received:', quoteData);
 
-    // Extract swap details from the quote response
-    const route = quoteData.routes?.[0];
-    if (!route) {
-      throw new Error('No swap route found');
+    // Check if we have routes
+    if (!quoteData.routes || quoteData.routes.length === 0) {
+      throw new Error('No swap routes found');
     }
 
-    // Process memo correctly - replace placeholder with actual destination address
-    let processedMemo = route.memo || '';
-    if (processedMemo.includes('{destinationAddress}')) {
-      processedMemo = processedMemo.replace('{destinationAddress}', recipient);
-    }
+    // Process all available routes for comparison
+    const processedRoutes = quoteData.routes.map((route: any) => {
+      // Process memo correctly - replace placeholder with actual destination address
+      let processedMemo = route.memo || '';
+      if (processedMemo.includes('{destinationAddress}')) {
+        processedMemo = processedMemo.replace('{destinationAddress}', recipient);
+      }
 
-    const swapDetails = {
-      depositAddress: route.targetAddress || route.inboundAddress,
-      memo: processedMemo,
-      expectedOutput: route.expectedBuyAmount || route.expectedOutput || route.expectedOutputUSD,
-      expectedOutputMaxSlippage: route.expectedBuyAmountMaxSlippage,
-      fees: route.fees || [],
+      // Get deposit address - handle Chainflip specific fields
+      let depositAddress = route.targetAddress || route.inboundAddress || route.depositAddress;
+      
+      // For Chainflip, sometimes the address is in meta
+      if (!depositAddress && route.meta?.chainflip?.depositAddress) {
+        depositAddress = route.meta.chainflip.depositAddress;
+      }
+
+      // Extract time estimation
+      let estimatedTime = route.estimatedTime;
+      if (typeof estimatedTime === 'object' && estimatedTime !== null) {
+        if (estimatedTime.total) {
+          estimatedTime = `${Math.round(estimatedTime.total / 60)} min`;
+        } else {
+          const total = (estimatedTime.inbound || 0) + (estimatedTime.swap || 0) + (estimatedTime.outbound || 0);
+          estimatedTime = total > 0 ? `${Math.round(total / 60)} min` : '5-10 min';
+        }
+      } else if (typeof estimatedTime === 'number') {
+        estimatedTime = `${Math.round(estimatedTime / 60)} min`;
+      } else {
+        estimatedTime = '5-10 min';
+      }
+
+      return {
+        provider: route.providers?.[0] || route.provider || 'Unknown',
+        depositAddress,
+        memo: processedMemo,
+        expectedOutput: route.expectedBuyAmount || route.expectedOutput || route.expectedOutputUSD,
+        expectedOutputMaxSlippage: route.expectedBuyAmountMaxSlippage,
+        fees: route.fees || [],
+        estimatedTime,
+        priceImpact: route.meta?.priceImpact || route.totalSlippageBps / 100 || 0,
+        warnings: route.warnings || [],
+        totalFees: route.fees ? route.fees.reduce((sum: number, fee: any) => {
+          const feeAmount = parseFloat(fee.amount || '0');
+          return sum + (isNaN(feeAmount) ? 0 : feeAmount);
+        }, 0) : 0
+      };
+    });
+
+    console.log('Processed routes:', processedRoutes);
+
+    // Return all routes for comparison
+    const response = {
+      routes: processedRoutes,
       expiresIn: 900, // 15 minutes standard TTL
-      provider: route.providers?.[0] || route.provider,
-      estimatedTime: route.estimatedTime || '5-10 minutes',
-      priceImpact: route.meta?.priceImpact,
-      warnings: route.warnings || []
+      bestRoute: processedRoutes[0] // First route is usually the best
     };
 
-    console.log('Swap details prepared:', swapDetails);
+    console.log('Final response:', response);
 
     return new Response(
-      JSON.stringify(swapDetails),
+      JSON.stringify(response),
       {
         headers: { 
           ...corsHeaders, 

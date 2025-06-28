@@ -5,6 +5,7 @@ import { useSwapAssets } from '../hooks/useSwapAssets';
 import { useSwapKit } from '../hooks/useSwapKit';
 import { SwapConfirmation } from '../components/SwapConfirmation';
 import { SwapProgress } from '../components/SwapProgress';
+import ProviderComparison from '../components/ProviderComparison';
 import TokenSelector from '../components/TokenSelector';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,8 @@ const ManualSwap = () => {
   const [toToken, setToToken] = useState('ETH.ETH');
   const [amount, setAmount] = useState('');
   const [destinationAddress, setDestinationAddress] = useState('');
-  const [swapDetails, setSwapDetails] = useState(null);
+  const [swapRoutes, setSwapRoutes] = useState(null);
+  const [selectedRoute, setSelectedRoute] = useState(null);
   const [currentStep, setCurrentStep] = useState('form');
   const [txHash, setTxHash] = useState('');
 
@@ -58,23 +60,35 @@ const ManualSwap = () => {
       
       console.log('Swap details received:', details);
       
-      if (details) {
-        const fromAsset = assets.find(asset => asset.identifier === fromToken);
-        const toAsset = assets.find(asset => asset.identifier === toToken);
+      if (details && details.routes && details.routes.length > 0) {
+        setSwapRoutes(details);
         
-        setSwapDetails({
-          ...details,
-          fromAsset,
-          toAsset,
-          exactAmount: amount,
-          recipient: destinationAddress
-        });
-        setCurrentStep('confirmation');
-        
-        toast({
-          title: "Cotización obtenida",
-          description: `Recibirás aproximadamente ${details.expectedOutput} ${toAsset?.ticker}`,
-        });
+        // If multiple routes, show comparison, otherwise go directly to confirmation
+        if (details.routes.length > 1) {
+          setCurrentStep('comparison');
+          toast({
+            title: "Múltiples proveedores disponibles",
+            description: `Encontramos ${details.routes.length} opciones para tu swap`,
+          });
+        } else {
+          // Single route, go directly to confirmation
+          const fromAsset = assets.find(asset => asset.identifier === fromToken);
+          const toAsset = assets.find(asset => asset.identifier === toToken);
+          
+          setSelectedRoute({
+            ...details.routes[0],
+            fromAsset,
+            toAsset,
+            exactAmount: amount,
+            recipient: destinationAddress
+          });
+          setCurrentStep('confirmation');
+          
+          toast({
+            title: "Cotización obtenida",
+            description: `Recibirás aproximadamente ${details.routes[0].expectedOutput} ${toAsset?.ticker}`,
+          });
+        }
       }
     } catch (error) {
       console.error('Error getting swap details:', error);
@@ -86,6 +100,25 @@ const ManualSwap = () => {
     }
   };
 
+  const handleSelectProvider = (route: any) => {
+    const fromAsset = assets.find(asset => asset.identifier === fromToken);
+    const toAsset = assets.find(asset => asset.identifier === toToken);
+    
+    setSelectedRoute({
+      ...route,
+      fromAsset,
+      toAsset,
+      exactAmount: amount,
+      recipient: destinationAddress
+    });
+    setCurrentStep('confirmation');
+    
+    toast({
+      title: "Proveedor seleccionado",
+      description: `Usando ${route.provider} para el swap`,
+    });
+  };
+
   const handleConfirmSwap = (transactionHash: string) => {
     setTxHash(transactionHash);
     setCurrentStep('progress');
@@ -93,13 +126,20 @@ const ManualSwap = () => {
 
   const handleBackToForm = () => {
     setCurrentStep('form');
-    setSwapDetails(null);
+    setSwapRoutes(null);
+    setSelectedRoute(null);
     setTxHash('');
+  };
+
+  const handleBackToComparison = () => {
+    setCurrentStep('comparison');
+    setSelectedRoute(null);
   };
 
   const handleNewSwap = () => {
     setCurrentStep('form');
-    setSwapDetails(null);
+    setSwapRoutes(null);
+    setSelectedRoute(null);
     setTxHash('');
     setAmount('');
     setDestinationAddress('');
@@ -299,7 +339,25 @@ const ManualSwap = () => {
             </motion.div>
           )}
 
-          {currentStep === 'confirmation' && swapDetails && (
+          {currentStep === 'comparison' && swapRoutes && (
+            <motion.div
+              key="comparison"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+            >
+              <ProviderComparison
+                routes={swapRoutes.routes}
+                fromAsset={assets.find(asset => asset.identifier === fromToken)}
+                toAsset={assets.find(asset => asset.identifier === toToken)}
+                amount={amount}
+                onSelectProvider={handleSelectProvider}
+                onBack={handleBackToForm}
+              />
+            </motion.div>
+          )}
+
+          {currentStep === 'confirmation' && selectedRoute && (
             <motion.div
               key="confirmation"
               initial={{ opacity: 0, x: 20 }}
@@ -307,9 +365,9 @@ const ManualSwap = () => {
               exit={{ opacity: 0, x: 20 }}
             >
               <SwapConfirmation 
-                swapDetails={swapDetails}
+                swapDetails={selectedRoute}
                 onConfirm={handleConfirmSwap}
-                onBack={handleBackToForm}
+                onBack={swapRoutes && swapRoutes.routes.length > 1 ? handleBackToComparison : handleBackToForm}
               />
             </motion.div>
           )}
@@ -323,7 +381,7 @@ const ManualSwap = () => {
             >
               <SwapProgress 
                 txHash={txHash}
-                swapDetails={swapDetails}
+                swapDetails={selectedRoute}
                 onNewSwap={handleNewSwap}
                 getSwapStatus={getSwapStatus}
               />
