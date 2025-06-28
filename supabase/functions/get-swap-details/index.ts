@@ -78,13 +78,23 @@ serve(async (req) => {
       throw new Error('No swap route found');
     }
 
+    // Process memo correctly - replace placeholder with actual destination address
+    let processedMemo = route.memo || '';
+    if (processedMemo.includes('{destinationAddress}')) {
+      processedMemo = processedMemo.replace('{destinationAddress}', recipient);
+    }
+
     const swapDetails = {
-      depositAddress: route.transaction?.from || route.inboundAddress,
-      memo: route.transaction?.memo || route.memo || '',
-      expectedOutput: route.expectedOutput || route.expectedOutputUSD,
+      depositAddress: route.targetAddress || route.inboundAddress,
+      memo: processedMemo,
+      expectedOutput: route.expectedBuyAmount || route.expectedOutput || route.expectedOutputUSD,
+      expectedOutputMaxSlippage: route.expectedBuyAmountMaxSlippage,
+      fees: route.fees || [],
       expiresIn: 900, // 15 minutes standard TTL
-      provider: route.provider,
-      estimatedTime: route.estimatedTime || '5-10 minutes'
+      provider: route.providers?.[0] || route.provider,
+      estimatedTime: route.estimatedTime || '5-10 minutes',
+      priceImpact: route.meta?.priceImpact,
+      warnings: route.warnings || []
     };
 
     console.log('Swap details prepared:', swapDetails);

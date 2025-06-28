@@ -45,7 +45,7 @@ export const useSwapAssets = () => {
             chain: asset.chain || 'Unknown',
             chainId: asset.chainId || asset.chain,
             ticker: asset.symbol || asset.ticker,
-            identifier: asset.symbol || asset.identifier || `${asset.chain}.${asset.symbol}`,
+            identifier: asset.identifier || asset.symbol || `${asset.chain}.${asset.symbol}`,
             symbol: asset.symbol || asset.ticker,
             name: asset.name || asset.symbol,
             decimals: asset.decimals || 18,
@@ -78,7 +78,7 @@ export const useSwapAssets = () => {
         }
       }
       
-      // Enhanced fallback with more tokens and proper image URLs
+      // Enhanced fallback with more comprehensive token list
       console.log('Using enhanced fallback mock data');
       const mockAssets: SwapAsset[] = [
         { 
@@ -168,6 +168,50 @@ export const useSwapAssets = () => {
           decimals: 8,
           logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/ltc.ltc.png',
           coingeckoId: 'litecoin'
+        },
+        { 
+          chain: 'SOL', 
+          chainId: 'solana',
+          ticker: 'SOL',
+          identifier: 'SOL.SOL',
+          symbol: 'SOL', 
+          name: 'Solana', 
+          decimals: 9,
+          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/sol.sol.png',
+          coingeckoId: 'solana'
+        },
+        { 
+          chain: 'THOR', 
+          chainId: 'thorchain',
+          ticker: 'RUNE',
+          identifier: 'THOR.RUNE',
+          symbol: 'RUNE', 
+          name: 'THORChain', 
+          decimals: 8,
+          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/thor.rune.png',
+          coingeckoId: 'thorchain'
+        },
+        { 
+          chain: 'MAYA', 
+          chainId: 'mayachain',
+          ticker: 'CACAO',
+          identifier: 'MAYA.CACAO',
+          symbol: 'CACAO', 
+          name: 'Cacao', 
+          decimals: 10,
+          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/maya.cacao.png',
+          coingeckoId: 'cacao'
+        },
+        { 
+          chain: 'ATOM', 
+          chainId: 'cosmoshub-4',
+          ticker: 'ATOM',
+          identifier: 'GAIA.ATOM',
+          symbol: 'ATOM', 
+          name: 'Cosmos Hub', 
+          decimals: 6,
+          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/gaia.atom.png',
+          coingeckoId: 'cosmos'
         }
       ];
       
