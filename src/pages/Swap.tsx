@@ -12,35 +12,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useSwapAssets } from '../hooks/useSwapAssets';
 import { AlertCircle } from 'lucide-react';
-
-// Address validation function
-const validateAddress = (address: string, chain: string): boolean => {
-  if (!address || address.length < 10) return false;
-  
-  switch (chain.toUpperCase()) {
-    case 'BTC':
-      return /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^bc1[a-z0-9]{39,59}$/.test(address);
-    case 'ETH':
-    case 'AVAX':
-    case 'BSC':
-      return /^0x[a-fA-F0-9]{40}$/.test(address);
-    case 'ATOM':
-    case 'GAIA':
-      return /^cosmos[a-z0-9]{39}$/.test(address);
-    case 'THOR':
-      return /^thor[a-z0-9]{39}$/.test(address);
-    case 'MAYA':
-      return /^maya[a-z0-9]{39}$/.test(address);
-    case 'SOL':
-      return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
-    case 'DOGE':
-      return /^D{1}[5-9A-HJ-NP-U]{1}[1-9A-HJ-NP-Za-km-z]{32}$/.test(address);
-    case 'LTC':
-      return /^[LM3][a-km-zA-HJ-NP-Z1-9]{26,33}$|^ltc1[a-z0-9]{39,59}$/.test(address);
-    default:
-      return true; // Allow unknown chains
-  }
-};
+import { validateSwapInputs } from '../utils/addressValidation';
 
 const Swap = () => {
   const { 
@@ -73,26 +45,6 @@ const Swap = () => {
   };
 
   const handleEstimate = async () => {
-    // Enhanced validations
-    const numAmount = parseFloat(amount);
-    if (!amount || isNaN(numAmount) || numAmount <= 0) {
-      toast({
-        title: "Cantidad inválida",
-        description: "Ingresa una cantidad válida mayor a 0",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (fromToken === toToken) {
-      toast({
-        title: "Tokens iguales",
-        description: "Los tokens de origen y destino deben ser diferentes",
-        variant: "destructive"
-      });
-      return;
-    }
-
     if (!ready) {
       toast({
         title: "Cliente no listo",
@@ -111,21 +63,32 @@ const Swap = () => {
       return;
     }
 
+    // Get destination address from connected wallet
+    const toChain = toToken.split('.')[0];
+    const destinationAddress = addresses[toChain];
+    
+    if (!destinationAddress) {
+      toast({
+        title: "Dirección no encontrada",
+        description: `No se encontró dirección para ${toChain} en tu wallet conectada`,
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Enhanced validations using the utility function
+    const validationError = validateSwapInputs(fromToken, toToken, amount, destinationAddress);
+    if (validationError) {
+      toast({
+        title: "Error de validación",
+        description: validationError,
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
       setSwapLoading(true);
-      
-      // Get destination address from connected wallet
-      const toChain = toToken.split('.')[0];
-      const destinationAddress = addresses[toChain];
-      
-      if (!destinationAddress) {
-        throw new Error(`No se encontró dirección para ${toChain} en tu wallet conectada`);
-      }
-
-      // Validate address format
-      if (!validateAddress(destinationAddress, toChain)) {
-        throw new Error(`Dirección inválida para ${toChain}: ${destinationAddress}`);
-      }
 
       console.log('Getting swap estimate:', { fromToken, toToken, amount, destinationAddress });
 
@@ -351,7 +314,10 @@ const Swap = () => {
                     <div key={chain} className="flex items-center space-x-2">
                       <span className="font-medium">{chain}:</span>
                       <span className="font-mono text-xs">
-                        {address.slice(0, 8)}...{address.slice(-8)}
+                        {typeof address === 'string' ? 
+                          `${address.slice(0, 8)}...${address.slice(-8)}` : 
+                          'No disponible'
+                        }
                       </span>
                     </div>
                   ))}
@@ -360,7 +326,7 @@ const Swap = () => {
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={disconnectWallet}
+                onClick={() => disconnectWallet()}
               >
                 Desconectar
               </Button>

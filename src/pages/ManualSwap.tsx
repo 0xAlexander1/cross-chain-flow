@@ -9,35 +9,7 @@ import TokenSelector from '../components/TokenSelector';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, RefreshCw } from 'lucide-react';
-
-// Address validation functions
-const validateAddress = (address: string, chain: string): boolean => {
-  if (!address || address.length < 10) return false;
-  
-  switch (chain.toUpperCase()) {
-    case 'BTC':
-      return /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^bc1[a-z0-9]{39,59}$/.test(address);
-    case 'ETH':
-    case 'AVAX':
-    case 'BSC':
-      return /^0x[a-fA-F0-9]{40}$/.test(address);
-    case 'ATOM':
-    case 'GAIA':
-      return /^cosmos[a-z0-9]{39}$/.test(address);
-    case 'THOR':
-      return /^thor[a-z0-9]{39}$/.test(address);
-    case 'MAYA':
-      return /^maya[a-z0-9]{39}$/.test(address);
-    case 'SOL':
-      return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
-    case 'DOGE':
-      return /^D{1}[5-9A-HJ-NP-U]{1}[1-9A-HJ-NP-Za-km-z]{32}$/.test(address);
-    case 'LTC':
-      return /^[LM3][a-km-zA-HJ-NP-Z1-9]{26,33}$|^ltc1[a-z0-9]{39,59}$/.test(address);
-    default:
-      return true; // Allow unknown chains
-  }
-};
+import { validateSwapInputs } from '../utils/addressValidation';
 
 const ManualSwap = () => {
   const { assets, loading: assetsLoading, error: assetsError, refreshAssets } = useSwapAssets();
@@ -54,41 +26,12 @@ const ManualSwap = () => {
   const [txHash, setTxHash] = useState('');
 
   const handleGetSwapDetails = async () => {
-    // Enhanced validations
-    if (!amount || !destinationAddress) {
+    // Enhanced validations using the utility function
+    const validationError = validateSwapInputs(fromToken, toToken, amount, destinationAddress);
+    if (validationError) {
       toast({
-        title: "Campos requeridos",
-        description: "Por favor completa todos los campos",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const numAmount = parseFloat(amount);
-    if (isNaN(numAmount) || numAmount <= 0) {
-      toast({
-        title: "Cantidad inválida",
-        description: "La cantidad debe ser un número mayor a 0",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (fromToken === toToken) {
-      toast({
-        title: "Tokens iguales",
-        description: "Los tokens de origen y destino deben ser diferentes",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Validate destination address format
-    const toChain = toToken.split('.')[0];
-    if (!validateAddress(destinationAddress, toChain)) {
-      toast({
-        title: "Dirección inválida",
-        description: `El formato de la dirección no es válido para ${toChain}`,
+        title: "Error de validación",
+        description: validationError,
         variant: "destructive"
       });
       return;

@@ -46,7 +46,7 @@ serve(async (req) => {
       throw new Error('SWAPKIT_API_KEY not found in environment variables');
     }
 
-    // Get swap quote from SwapKit API with multiple providers
+    // Get swap quote from SwapKit API with multiple providers (prioritizing MAYACHAIN, THORCHAIN, CHAINFLIP)
     const quoteResponse = await fetch('https://api.swapkit.dev/quote', {
       method: 'POST',
       headers: {
@@ -59,7 +59,7 @@ serve(async (req) => {
         buyAsset: toAsset,
         sellAmount: amount,
         recipientAddress: recipient,
-        providers: ['CHAINFLIP', 'THORCHAIN', 'MAYACHAIN'] // Multiple providers in order of preference
+        providers: ['MAYACHAIN', 'THORCHAIN', 'CHAINFLIP'] // Multiple providers in order of preference
       })
     });
 
@@ -85,7 +85,7 @@ serve(async (req) => {
         processedMemo = processedMemo.replace('{destinationAddress}', recipient);
       }
 
-      // Get deposit address - handle Chainflip specific fields
+      // Get deposit address - handle different provider formats
       let depositAddress = route.targetAddress || route.inboundAddress || route.depositAddress;
       
       // For Chainflip, sometimes the address is in meta
