@@ -30,9 +30,14 @@ export const useSwapKitClient = () => {
   const [loading, setLoading] = useState(false);
   const [connectedWallets, setConnectedWallets] = useState<string[]>([]);
   const [ready, setReady] = useState(!!SwapKitApi);
+  const [error, setError] = useState<string | null>(null);
+  const [addresses, setAddresses] = useState<Record<string, string>>({});
 
   // Supported wallets that we have packages for
   const supportedWallets = ['KEYSTORE', 'XDEFI', 'KEPLR', 'METAMASK'];
+
+  // Get the first connected wallet as the primary one
+  const connectedWallet = connectedWallets.length > 0 ? connectedWallets[0] : null;
 
   const getSupportedAssets = useCallback(async () => {
     if (!client) {
@@ -55,6 +60,7 @@ export const useSwapKitClient = () => {
     }
 
     setLoading(true);
+    setError(null);
     
     try {
       console.log(`Attempting to connect ${walletType} wallet...`);
@@ -105,6 +111,12 @@ export const useSwapKitClient = () => {
             await window.ethereum.request({ method: 'eth_requestAccounts' });
             console.log('MetaMask connected successfully');
             setConnectedWallets(prev => [...prev, walletType]);
+            
+            // Get MetaMask addresses
+            const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+            if (accounts.length > 0) {
+              setAddresses(prev => ({ ...prev, ETH: accounts[0] }));
+            }
             return;
           } else {
             throw new Error('MetaMask not found. Please install MetaMask extension.');
@@ -131,33 +143,49 @@ export const useSwapKitClient = () => {
         setClient(connectedClient);
         setConnectedWallets(prev => [...prev, walletType]);
         
+        // Get wallet addresses for different chains
+        const walletAddresses: Record<string, string> = {};
+        const chains = ['BTC', 'ETH', 'THORCHAIN', 'ATOM', 'DOGE', 'LTC'];
+        
+        for (const chain of chains) {
+          try {
+            const address = await connectedClient.getWalletAddress?.(chain);
+            if (address) {
+              walletAddresses[chain] = address;
+            }
+          } catch (error) {
+            console.warn(`Failed to get ${chain} address:`, error);
+          }
+        }
+        
+        setAddresses(walletAddresses);
         console.log(`${walletType} wallet connected successfully`);
       }
       
     } catch (error) {
       console.error(`Failed to connect ${walletType} wallet:`, error);
+      setError(error instanceof Error ? error.message : 'Failed to connect wallet');
       throw error;
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const disconnectWallet = useCallback(async (walletType: string) => {
+  const disconnectWallet = useCallback(async () => {
     try {
-      // Remove from connected wallets
-      setConnectedWallets(prev => prev.filter(w => w !== walletType));
+      // Clear all wallet state
+      setConnectedWallets([]);
+      setAddresses({});
+      setClient(null);
+      setError(null);
       
-      // If no wallets left, clear the client
-      if (connectedWallets.length <= 1) {
-        setClient(null);
-      }
-      
-      console.log(`${walletType} wallet disconnected`);
+      console.log('Wallet disconnected');
     } catch (error) {
-      console.error(`Failed to disconnect ${walletType} wallet:`, error);
+      console.error('Failed to disconnect wallet:', error);
+      setError(error instanceof Error ? error.message : 'Failed to disconnect wallet');
       throw error;
     }
-  }, [connectedWallets]);
+  }, []);
 
   const getWalletAddress = useCallback((chain: string) => {
     if (!client) return null;
@@ -179,6 +207,9 @@ export const useSwapKitClient = () => {
     getSupportedAssets,
     loading,
     connectedWallets,
+    connectedWallet,
+    addresses,
+    error,
     supportedWallets,
     isConnected: connectedWallets.length > 0,
     ready
