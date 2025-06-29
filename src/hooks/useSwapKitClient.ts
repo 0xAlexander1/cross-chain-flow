@@ -1,272 +1,140 @@
 
-import { useState, useEffect } from 'react';
-import { SwapKitCore } from '@swapkit/core';
+import { useState, useCallback } from 'react';
 
-interface SwapKitClient {
-  ready: boolean;
-  client: any | null;
-  supportedWallets: string[];
-  connectWallet: (walletType: string, options?: any) => Promise<void>;
-  disconnectWallet: () => void;
-  connectedWallet: string | null;
-  addresses: Record<string, string>;
-  getSupportedAssets: () => Promise<any[]>;
-  getSwapDetails: (params: any) => Promise<any>;
-  error: string | null;
-  loading: boolean;
-}
+// Import SwapKitApi instead of SwapKitCore
+import { SwapKitApi } from '@swapkit/core';
 
-export const useSwapKitClient = (): SwapKitClient => {
-  const [client, setClient] = useState<any | null>(null);
-  const [ready, setReady] = useState(false);
-  const [connectedWallet, setConnectedWallet] = useState<string | null>(null);
-  const [addresses, setAddresses] = useState<Record<string, string>>({});
-  const [error, setError] = useState<string | null>(null);
+// Individual wallet imports
+import { keystoreWallet } from '@swapkit/wallet-keystore';
+import { xdefiWallet } from '@swapkit/wallet-xdefi';
+import { keplrWallet } from '@swapkit/wallet-keplr';
+
+export const useSwapKitClient = () => {
+  const [client, setClient] = useState<SwapKitApi | null>(null);
   const [loading, setLoading] = useState(false);
+  const [connectedWallets, setConnectedWallets] = useState<string[]>([]);
 
-  // Supported wallet types
-  const supportedWallets: string[] = [
-    'KEYSTORE',
-    'XDEFI',
-    'METAMASK',
-    'WALLETCONNECT',
-    'KEPLR'
-  ];
+  // Supported wallets that we have packages for
+  const supportedWallets = ['KEYSTORE', 'XDEFI', 'KEPLR', 'METAMASK'];
 
-  useEffect(() => {
-    initializeSwapKit();
-  }, []);
-
-  const initializeSwapKit = async () => {
+  const connectWallet = useCallback(async (walletType: string, options?: any) => {
+    setLoading(true);
+    
     try {
-      setLoading(true);
-      setError(null);
-
-      console.log('Initializing SwapKitCore...');
-
-      // Initialize SwapKitCore
-      const swapKitClient = new SwapKitCore({
-        config: {
-          network: 'mainnet',
-          blockchainApiKey: '', // Optional
-          covalentApiKey: '', // Optional
-          ethplorerApiKey: '', // Optional
-        },
-      });
-
-      // Set the client
-      setClient(swapKitClient);
-      setReady(true);
+      console.log(`Attempting to connect ${walletType} wallet...`);
       
-      console.log('SwapKitCore initialized successfully');
+      let walletClient;
       
-    } catch (err) {
-      console.error('Error initializing SwapKit:', err);
-      setError(err instanceof Error ? err.message : 'Failed to initialize SwapKit');
-      
-      // Create fallback mock client for development
-      const mockClient = {
-        getSupportedAssets: async () => {
-          throw new Error('Use backend getSupportedAssets instead');
-        },
-        getSwapDetails: async (params: any) => {
-          throw new Error('Use backend getSwapDetails instead');
-        }
-      };
-      
-      setClient(mockClient);
-      setReady(true);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const connectWallet = async (walletType: string, options?: any) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      console.log('Connecting wallet:', walletType);
-
-      if (!client) {
-        throw new Error('SwapKit client not initialized');
-      }
-
       switch (walletType) {
         case 'KEYSTORE':
           if (!options?.phrase) {
-            throw new Error('Seed phrase required for Keystore wallet');
+            throw new Error('Seed phrase is required for Keystore wallet');
           }
-          
-          try {
-            // Use SwapKit's keystore connection
-            await client.connectWallet('KEYSTORE', { phrase: options.phrase });
-            
-            // Get addresses from connected wallet
-            const walletAddresses = await client.getWalletAddresses();
-            setAddresses(walletAddresses || {});
-            setConnectedWallet(walletType);
-            
-          } catch (keystoreError) {
-            console.warn('SwapKit keystore failed, using mock:', keystoreError);
-            // Fallback to mock addresses for development
-            setConnectedWallet(walletType);
-            setAddresses({
-              BTC: 'bc1q...' + Math.random().toString(36).substr(2, 8),
-              ETH: '0x' + Math.random().toString(36).substr(2, 40),
-              AVAX: '0x' + Math.random().toString(36).substr(2, 40),
-              BSC: '0x' + Math.random().toString(36).substr(2, 40),
-            });
-          }
+          walletClient = keystoreWallet({
+            phrase: options.phrase,
+            chains: ['BTC', 'ETH', 'THORCHAIN']
+          });
           break;
           
         case 'XDEFI':
-          try {
-            await client.connectWallet('XDEFI');
-            const walletAddresses = await client.getWalletAddresses();
-            setAddresses(walletAddresses || {});
-            setConnectedWallet(walletType);
-          } catch (xdefiError) {
-            console.warn('XDEFI connection failed:', xdefiError);
-            if (typeof window !== 'undefined' && (window as any).xfi) {
-              setConnectedWallet(walletType);
-              setAddresses({
-                ETH: '0x' + Math.random().toString(36).substr(2, 40),
-              });
-            } else {
-              throw new Error('XDEFI wallet not detected');
-            }
+          // @ts-expect-error - XDEFI wallet may not be available
+          if (typeof window !== 'undefined' && window.xfi) {
+            walletClient = xdefiWallet();
+          } else {
+            throw new Error('XDEFI wallet not found. Please install XDEFI extension.');
+          }
+          break;
+          
+        case 'KEPLR':
+          // @ts-expect-error - Keplr wallet may not be available
+          if (typeof window !== 'undefined' && window.keplr) {
+            walletClient = keplrWallet();
+          } else {
+            throw new Error('Keplr wallet not found. Please install Keplr extension.');
           }
           break;
           
         case 'METAMASK':
-          try {
-            await client.connectWallet('METAMASK');
-            const walletAddresses = await client.getWalletAddresses();
-            setAddresses(walletAddresses || {});
-            setConnectedWallet(walletType);
-          } catch (metamaskError) {
-            console.warn('MetaMask connection failed:', metamaskError);
-            if (typeof window !== 'undefined' && (window as any).ethereum) {
-              const accounts = await (window as any).ethereum.request({ 
-                method: 'eth_requestAccounts' 
-              });
-              if (accounts.length > 0) {
-                setConnectedWallet(walletType);
-                setAddresses({
-                  ETH: accounts[0],
-                });
-              }
-            } else {
-              throw new Error('MetaMask not detected');
-            }
+          // @ts-expect-error - MetaMask may not be available
+          if (typeof window !== 'undefined' && window.ethereum) {
+            // For MetaMask, we'll use a basic connection approach
+            await window.ethereum.request({ method: 'eth_requestAccounts' });
+            console.log('MetaMask connected successfully');
+            setConnectedWallets(prev => [...prev, walletType]);
+            return;
+          } else {
+            throw new Error('MetaMask not found. Please install MetaMask extension.');
           }
-          break;
-
-        case 'WALLETCONNECT':
-          try {
-            await client.connectWallet('WALLETCONNECT');
-            const walletAddresses = await client.getWalletAddresses();
-            setAddresses(walletAddresses || {});
-            setConnectedWallet(walletType);
-          } catch (wcError) {
-            console.warn('WalletConnect connection failed:', wcError);
-            throw new Error('WalletConnect connection failed');
-          }
-          break;
-
-        case 'KEPLR':
-          try {
-            await client.connectWallet('KEPLR');
-            const walletAddresses = await client.getWalletAddresses();
-            setAddresses(walletAddresses || {});
-            setConnectedWallet(walletType);
-          } catch (keplrError) {
-            console.warn('Keplr connection failed:', keplrError);
-            throw new Error('Keplr wallet not detected');
-          }
-          break;
           
         default:
           throw new Error(`Unsupported wallet type: ${walletType}`);
       }
+
+      // Initialize SwapKit client if we have a wallet
+      if (walletClient) {
+        const swapKitClient = SwapKitApi({
+          config: {
+            stagenet: false, // Use mainnet
+            blockchairApiKey: '', // Add if needed
+            covalentApiKey: '', // Add if needed
+            ethplorerApiKey: '', // Add if needed
+          }
+        });
+
+        // Connect the wallet to SwapKit
+        const connectedClient = await swapKitClient.connectWallet(walletClient);
+        
+        setClient(connectedClient);
+        setConnectedWallets(prev => [...prev, walletType]);
+        
+        console.log(`${walletType} wallet connected successfully`);
+      }
       
-      console.log('Wallet connected successfully:', walletType);
-      
-    } catch (err) {
-      console.error('Error connecting wallet:', err);
-      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
-      throw err;
+    } catch (error) {
+      console.error(`Failed to connect ${walletType} wallet:`, error);
+      throw error;
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const disconnectWallet = () => {
+  const disconnectWallet = useCallback(async (walletType: string) => {
     try {
-      if (client && client.disconnectWallet) {
-        client.disconnectWallet();
+      // Remove from connected wallets
+      setConnectedWallets(prev => prev.filter(w => w !== walletType));
+      
+      // If no wallets left, clear the client
+      if (connectedWallets.length <= 1) {
+        setClient(null);
       }
-    } catch (err) {
-      console.warn('Error disconnecting wallet:', err);
+      
+      console.log(`${walletType} wallet disconnected`);
+    } catch (error) {
+      console.error(`Failed to disconnect ${walletType} wallet:`, error);
+      throw error;
     }
-    
-    setConnectedWallet(null);
-    setAddresses({});
-    console.log('Wallet disconnected');
-  };
+  }, [connectedWallets]);
 
-  const getSupportedAssets = async () => {
-    if (!client) {
-      throw new Error('SwapKit client not initialized');
-    }
+  const getWalletAddress = useCallback((chain: string) => {
+    if (!client) return null;
     
     try {
-      return await client.getSupportedAssets();
-    } catch (err) {
-      console.warn('SwapKit getSupportedAssets failed:', err);
-      throw new Error('Use backend getSupportedAssets instead');
+      // Try to get address for the specified chain
+      return client.getWalletAddress(chain) || null;
+    } catch (error) {
+      console.warn(`Failed to get address for chain ${chain}:`, error);
+      return null;
     }
-  };
-
-  const getSwapDetails = async (params: {
-    fromAsset: string;
-    toAsset: string;
-    amount: string;
-    destinationAddress: string;
-  }) => {
-    if (!client) {
-      throw new Error('SwapKit client not initialized');
-    }
-    
-    try {
-      return await client.getSwapRoute(params);
-    } catch (err) {
-      console.warn('SwapKit getSwapRoute failed:', err);
-      throw new Error('Use backend getSwapDetails instead');
-    }
-  };
+  }, [client]);
 
   return {
-    ready,
     client,
-    supportedWallets,
     connectWallet,
     disconnectWallet,
-    connectedWallet,
-    addresses,
-    getSupportedAssets,
-    getSwapDetails,
-    error,
-    loading
+    getWalletAddress,
+    loading,
+    connectedWallets,
+    supportedWallets,
+    isConnected: connectedWallets.length > 0
   };
 };
-
-// Extend the Window type for wallet detection
-declare global {
-  interface Window {
-    ethereum?: any;
-    xfi?: any;
-    keplr?: any;
-  }
-}
