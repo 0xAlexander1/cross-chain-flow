@@ -20,8 +20,8 @@ serve(async (req) => {
       throw new Error('SWAPKIT_API_KEY not found in environment variables');
     }
 
-    // Fetch tokens from SwapKit API
-    const response = await fetch('https://api.swapkit.dev/tokens?provider=CHAINFLIP', {
+    // Fetch all assets from SwapKit API
+    const response = await fetch('https://api.swapkit.dev/assets', {
       method: 'GET',
       headers: {
         'accept': 'application/json',
@@ -34,15 +34,19 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    console.log(`Successfully fetched ${data.tokens?.length || 0} tokens`);
+    console.log(`Successfully fetched ${data.assets?.length || 0} assets`);
 
     // Transform the data to match expected format
-    const assets = data.tokens?.map((token: any) => ({
-      symbol: token.identifier || token.ticker,
-      chain: token.chain,
-      decimals: token.decimals,
-      name: token.name,
-      logoURI: token.logoURI
+    const assets = data.assets?.map((asset: any) => ({
+      symbol: asset.identifier || asset.ticker || asset.symbol,
+      chain: asset.chain,
+      decimals: asset.decimals,
+      name: asset.name,
+      logoURI: asset.logoURI,
+      identifier: asset.identifier,
+      ticker: asset.ticker || asset.symbol,
+      coingeckoId: asset.coingeckoId,
+      address: asset.address
     })) || [];
 
     return new Response(

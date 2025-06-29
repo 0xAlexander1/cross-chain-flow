@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSwapAssets } from '../hooks/useSwapAssets';
@@ -10,6 +9,35 @@ import TokenSelector from '../components/TokenSelector';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, RefreshCw } from 'lucide-react';
+
+// Address validation functions
+const validateAddress = (address: string, chain: string): boolean => {
+  if (!address || address.length < 10) return false;
+  
+  switch (chain.toUpperCase()) {
+    case 'BTC':
+      return /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^bc1[a-z0-9]{39,59}$/.test(address);
+    case 'ETH':
+    case 'AVAX':
+    case 'BSC':
+      return /^0x[a-fA-F0-9]{40}$/.test(address);
+    case 'ATOM':
+    case 'GAIA':
+      return /^cosmos[a-z0-9]{39}$/.test(address);
+    case 'THOR':
+      return /^thor[a-z0-9]{39}$/.test(address);
+    case 'MAYA':
+      return /^maya[a-z0-9]{39}$/.test(address);
+    case 'SOL':
+      return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
+    case 'DOGE':
+      return /^D{1}[5-9A-HJ-NP-U]{1}[1-9A-HJ-NP-Za-km-z]{32}$/.test(address);
+    case 'LTC':
+      return /^[LM3][a-km-zA-HJ-NP-Z1-9]{26,33}$|^ltc1[a-z0-9]{39,59}$/.test(address);
+    default:
+      return true; // Allow unknown chains
+  }
+};
 
 const ManualSwap = () => {
   const { assets, loading: assetsLoading, error: assetsError, refreshAssets } = useSwapAssets();
@@ -26,6 +54,7 @@ const ManualSwap = () => {
   const [txHash, setTxHash] = useState('');
 
   const handleGetSwapDetails = async () => {
+    // Enhanced validations
     if (!amount || !destinationAddress) {
       toast({
         title: "Campos requeridos",
@@ -35,10 +64,11 @@ const ManualSwap = () => {
       return;
     }
 
-    if (parseFloat(amount) <= 0) {
+    const numAmount = parseFloat(amount);
+    if (isNaN(numAmount) || numAmount <= 0) {
       toast({
         title: "Cantidad inválida",
-        description: "La cantidad debe ser mayor a 0",
+        description: "La cantidad debe ser un número mayor a 0",
         variant: "destructive"
       });
       return;
@@ -47,7 +77,18 @@ const ManualSwap = () => {
     if (fromToken === toToken) {
       toast({
         title: "Tokens iguales",
-        description: "Selecciona tokens diferentes para el intercambio",
+        description: "Los tokens de origen y destino deben ser diferentes",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Validate destination address format
+    const toChain = toToken.split('.')[0];
+    if (!validateAddress(destinationAddress, toChain)) {
+      toast({
+        title: "Dirección inválida",
+        description: `El formato de la dirección no es válido para ${toChain}`,
         variant: "destructive"
       });
       return;
@@ -89,6 +130,12 @@ const ManualSwap = () => {
             description: `Recibirás aproximadamente ${details.routes[0].expectedOutput} ${toAsset?.ticker}`,
           });
         }
+      } else {
+        toast({
+          title: "Sin rutas disponibles",
+          description: "No se encontraron proveedores para este intercambio",
+          variant: "destructive"
+        });
       }
     } catch (error) {
       console.error('Error getting swap details:', error);
@@ -143,6 +190,10 @@ const ManualSwap = () => {
     setTxHash('');
     setAmount('');
     setDestinationAddress('');
+  };
+
+  const getToChain = () => {
+    return toToken.split('.')[0];
   };
 
   // Loading state
@@ -277,22 +328,25 @@ const ManualSwap = () => {
                     step="any"
                     min="0"
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Debe ser mayor a 0
+                  </p>
                 </div>
 
                 {/* Destination Address */}
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-2">
-                    Dirección de destino ({assets.find(a => a.identifier === toToken)?.ticker})
+                    Dirección de destino ({getToChain()})
                   </label>
                   <input
                     type="text"
                     value={destinationAddress}
                     onChange={(e) => setDestinationAddress(e.target.value)}
-                    placeholder={`Tu dirección de ${assets.find(a => a.identifier === toToken)?.ticker}`}
+                    placeholder={`Tu dirección de ${getToChain()}`}
                     className="w-full bg-background border border-border rounded-lg px-4 py-3 text-foreground placeholder-muted-foreground font-mono text-sm"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    Asegúrate de que la dirección sea correcta. Las transacciones son irreversibles.
+                    Asegúrate de que la dirección sea correcta y válida para {getToChain()}. Las transacciones son irreversibles.
                   </p>
                 </div>
 

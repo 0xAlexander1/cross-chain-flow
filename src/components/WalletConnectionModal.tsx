@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSwapKitClient } from '../hooks/useSwapKitClient';
@@ -44,6 +43,18 @@ export const WalletConnectionModal: React.FC<WalletConnectionModalProps> = ({
       name: 'MetaMask',
       icon: '🦊',
       description: 'Ethereum wallet',
+      requiresSeed: false
+    },
+    'WALLETCONNECT': {
+      name: 'WalletConnect',
+      icon: '🔗',
+      description: 'Connect any wallet via WalletConnect',
+      requiresSeed: false
+    },
+    'KEPLR': {
+      name: 'Keplr',
+      icon: '🌌',
+      description: 'Cosmos ecosystem wallet',
       requiresSeed: false
     }
   };

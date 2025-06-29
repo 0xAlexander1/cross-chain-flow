@@ -11,6 +11,36 @@ import { Input } from '../components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useSwapAssets } from '../hooks/useSwapAssets';
+import { AlertCircle } from 'lucide-react';
+
+// Address validation function
+const validateAddress = (address: string, chain: string): boolean => {
+  if (!address || address.length < 10) return false;
+  
+  switch (chain.toUpperCase()) {
+    case 'BTC':
+      return /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^bc1[a-z0-9]{39,59}$/.test(address);
+    case 'ETH':
+    case 'AVAX':
+    case 'BSC':
+      return /^0x[a-fA-F0-9]{40}$/.test(address);
+    case 'ATOM':
+    case 'GAIA':
+      return /^cosmos[a-z0-9]{39}$/.test(address);
+    case 'THOR':
+      return /^thor[a-z0-9]{39}$/.test(address);
+    case 'MAYA':
+      return /^maya[a-z0-9]{39}$/.test(address);
+    case 'SOL':
+      return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
+    case 'DOGE':
+      return /^D{1}[5-9A-HJ-NP-U]{1}[1-9A-HJ-NP-Za-km-z]{32}$/.test(address);
+    case 'LTC':
+      return /^[LM3][a-km-zA-HJ-NP-Z1-9]{26,33}$|^ltc1[a-z0-9]{39,59}$/.test(address);
+    default:
+      return true; // Allow unknown chains
+  }
+};
 
 const Swap = () => {
   const { 
@@ -43,10 +73,30 @@ const Swap = () => {
   };
 
   const handleEstimate = async () => {
-    if (!amount || !ready) {
+    // Enhanced validations
+    const numAmount = parseFloat(amount);
+    if (!amount || isNaN(numAmount) || numAmount <= 0) {
       toast({
-        title: "Error",
-        description: "Ingresa una cantidad válida",
+        title: "Cantidad inválida",
+        description: "Ingresa una cantidad válida mayor a 0",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (fromToken === toToken) {
+      toast({
+        title: "Tokens iguales",
+        description: "Los tokens de origen y destino deben ser diferentes",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!ready) {
+      toast({
+        title: "Cliente no listo",
+        description: "SwapKit aún se está inicializando",
         variant: "destructive"
       });
       return;
@@ -69,8 +119,15 @@ const Swap = () => {
       const destinationAddress = addresses[toChain];
       
       if (!destinationAddress) {
-        throw new Error(`No se encontró dirección para ${toChain}`);
+        throw new Error(`No se encontró dirección para ${toChain} en tu wallet conectada`);
       }
+
+      // Validate address format
+      if (!validateAddress(destinationAddress, toChain)) {
+        throw new Error(`Dirección inválida para ${toChain}: ${destinationAddress}`);
+      }
+
+      console.log('Getting swap estimate:', { fromToken, toToken, amount, destinationAddress });
 
       const details = await getSwapDetails(fromToken, toToken, amount, destinationAddress);
 
@@ -103,6 +160,12 @@ const Swap = () => {
             description: `Recibirás aproximadamente ${details.routes[0].expectedOutput} ${toAsset?.ticker}`,
           });
         }
+      } else {
+        toast({
+          title: "Sin rutas disponibles",
+          description: "No se encontraron proveedores para este intercambio",
+          variant: "destructive"
+        });
       }
       
     } catch (error) {
@@ -165,10 +228,10 @@ const Swap = () => {
   if (!ready && !error) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="animate-pulse text-center">
-          <div className="h-8 bg-muted rounded w-48 mb-4 mx-auto"></div>
-          <div className="h-4 bg-muted rounded w-32 mx-auto"></div>
-          <p className="text-muted-foreground mt-2">Inicializando SwapKit...</p>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <h2 className="text-xl font-bold text-foreground mb-2">Inicializando SwapKit...</h2>
+          <p className="text-muted-foreground">Configurando cliente de intercambio</p>
         </div>
       </div>
     );
@@ -183,16 +246,24 @@ const Swap = () => {
           animate={{ opacity: 1, y: 0 }}
           className="text-center max-w-md"
         >
-          <div className="text-6xl mb-6">⚠️</div>
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-6" />
           <h2 className="text-2xl font-bold text-foreground mb-4">
             Error de inicialización
           </h2>
           <p className="text-muted-foreground mb-8">
             {error}
           </p>
-          <Button onClick={() => window.location.reload()}>
-            Reintentar
-          </Button>
+          <div className="space-y-3">
+            <Button onClick={() => window.location.reload()}>
+              Reintentar
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => window.location.href = '/manual-swap'}
+            >
+              Usar modo manual
+            </Button>
+          </div>
         </motion.div>
       </div>
     );
@@ -217,11 +288,12 @@ const Swap = () => {
           <Button
             onClick={() => setShowWalletModal(true)}
             size="lg"
+            className="mb-6"
           >
             Conectar Wallet
           </Button>
           
-          <div className="mt-6 text-sm text-muted-foreground">
+          <div className="text-sm text-muted-foreground">
             <p>¿Prefieres no conectar tu wallet?</p>
             <Button 
               variant="link" 
