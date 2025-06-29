@@ -13,41 +13,80 @@ serve(async (req) => {
   }
 
   try {
-    console.log('Fetching supported assets from SwapKit API...');
+    console.log('Fetching supported tokens from SwapKit API...');
     
     const swapkitApiKey = Deno.env.get('SWAPKIT_API_KEY');
     if (!swapkitApiKey) {
       throw new Error('SWAPKIT_API_KEY not found in environment variables');
     }
 
-    // Fetch all assets from SwapKit API
-    const response = await fetch('https://api.swapkit.dev/assets', {
-      method: 'GET',
-      headers: {
-        'accept': 'application/json',
-        'x-api-key': swapkitApiKey
+    // Lista de providers que queremos consultar
+    const providers = ['MAYACHAIN', 'THORCHAIN', 'CHAINFLIP'];
+    
+    console.log(`Fetching tokens from providers: ${providers.join(', ')}`);
+
+    // Para cada provider, consulta /tokens?provider=...
+    const promises = providers.map(async (provider) => {
+      try {
+        console.log(`Fetching tokens for provider: ${provider}`);
+        const response = await fetch(`https://api.swapkit.dev/tokens?provider=${provider}`, {
+          method: 'GET',
+          headers: {
+            'accept': 'application/json',
+            'x-api-key': swapkitApiKey
+          }
+        });
+
+        if (!response.ok) {
+          console.warn(`Error fetching tokens for ${provider}: ${response.status} ${response.statusText}`);
+          return [];
+        }
+
+        const data = await response.json();
+        console.log(`Received ${data?.length || 0} tokens from ${provider}`);
+        
+        // Asegurar que devuelve un array
+        return Array.isArray(data) ? data : [];
+      } catch (error) {
+        console.warn(`Failed to fetch tokens for ${provider}:`, error);
+        return [];
       }
     });
 
-    if (!response.ok) {
-      throw new Error(`SwapKit API error: ${response.status} ${response.statusText}`);
-    }
+    // Espera todas las peticiones
+    const results = await Promise.all(promises);
+    
+    // Combina arrays y filtra elementos válidos
+    const combined = results.flat().filter(token => 
+      token && 
+      typeof token === 'object' && 
+      (token.identifier || token.symbol || token.ticker)
+    );
+    
+    console.log(`Combined ${combined.length} tokens before deduplication`);
 
-    const data = await response.json();
-    console.log(`Successfully fetched ${data.assets?.length || 0} assets`);
+    // Elimina duplicados por identifier (o symbol si no hay identifier)
+    const tokenMap = new Map();
+    combined.forEach(token => {
+      const key = token.identifier || token.symbol || token.ticker;
+      if (key && !tokenMap.has(key)) {
+        // Normalizar estructura del token
+        tokenMap.set(key, {
+          symbol: token.symbol || token.ticker,
+          chain: token.chain,
+          decimals: token.decimals || 18,
+          name: token.name || token.symbol || token.ticker,
+          logoURI: token.logoURI,
+          identifier: token.identifier || `${token.chain}.${token.symbol}`,
+          ticker: token.ticker || token.symbol,
+          coingeckoId: token.coingeckoId,
+          address: token.address
+        });
+      }
+    });
 
-    // Transform the data to match expected format
-    const assets = data.assets?.map((asset: any) => ({
-      symbol: asset.identifier || asset.ticker || asset.symbol,
-      chain: asset.chain,
-      decimals: asset.decimals,
-      name: asset.name,
-      logoURI: asset.logoURI,
-      identifier: asset.identifier,
-      ticker: asset.ticker || asset.symbol,
-      coingeckoId: asset.coingeckoId,
-      address: asset.address
-    })) || [];
+    const assets = Array.from(tokenMap.values());
+    console.log(`Successfully processed ${assets.length} unique tokens`);
 
     return new Response(
       JSON.stringify({ assets }),
