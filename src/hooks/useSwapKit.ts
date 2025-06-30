@@ -45,10 +45,11 @@ export const useSwapKit = () => {
       const { data, error } = await supabase.functions.invoke('get-supported-assets');
 
       if (error) {
-        throw new Error(error.message);
+        throw new Error(error.message || 'Failed to fetch assets');
       }
 
-      return data.assets;
+      // Return the full response so useSwapAssets can handle different formats
+      return data;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch supported assets';
       setError(errorMessage);

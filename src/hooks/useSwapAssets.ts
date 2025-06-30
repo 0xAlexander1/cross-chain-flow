@@ -167,10 +167,29 @@ export const useSwapAssets = () => {
         
         if (cancelled) return;
         
-        if (response && response.assets && Array.isArray(response.assets) && response.assets.length > 0) {
-          setAssets(response.assets);
-          setDebugInfo(response.debug || response.providerStats);
+        // Handle different response formats
+        let assetsData = null;
+        
+        if (response && typeof response === 'object') {
+          // If response has assets property
+          if (response.assets && Array.isArray(response.assets)) {
+            assetsData = response.assets;
+            setDebugInfo(response.debug || response.providerStats);
+          }
+          // If response is directly an array
+          else if (Array.isArray(response)) {
+            assetsData = response;
+          }
+          // If response has data property
+          else if (response.data && Array.isArray(response.data)) {
+            assetsData = response.data;
+          }
+        }
+        
+        if (assetsData && assetsData.length > 0) {
+          setAssets(assetsData);
           setUsingFallback(false);
+          setError(null);
         } else {
           console.warn('Backend returned empty or invalid assets, using fallback data');
           setAssets(mockAssets);
