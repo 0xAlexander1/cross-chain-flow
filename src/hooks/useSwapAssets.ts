@@ -1,235 +1,116 @@
 
 import { useState, useEffect } from 'react';
-import { useSwapKitClient } from './useSwapKitClient';
 import { useSwapKit } from './useSwapKit';
 
-interface SwapAsset {
-  chain: string;
-  chainId?: string;
-  ticker: string;
-  identifier: string;
+interface Asset {
   symbol: string;
-  name: string;
+  chain: string;
   decimals: number;
+  name: string;
   logoURI?: string;
+  identifier: string;
+  ticker: string;
   coingeckoId?: string;
   address?: string;
+  supportedProviders: string[];
+  preferredProvider: string;
 }
 
+// Fallback mock data - solo se usa si el backend falla
+const mockAssets: Asset[] = [
+  {
+    symbol: 'BTC',
+    chain: 'BTC',
+    decimals: 8,
+    name: 'Bitcoin',
+    logoURI: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png',
+    identifier: 'BTC.BTC',
+    ticker: 'BTC',
+    supportedProviders: ['THORCHAIN', 'MAYACHAIN'],
+    preferredProvider: 'THORCHAIN'
+  },
+  {
+    symbol: 'ETH',
+    chain: 'ETH',
+    decimals: 18,
+    name: 'Ethereum',
+    logoURI: 'https://cryptologos.cc/logos/ethereum-eth-logo.png',
+    identifier: 'ETH.ETH',
+    ticker: 'ETH',
+    supportedProviders: ['THORCHAIN', 'CHAINFLIP'],
+    preferredProvider: 'THORCHAIN'
+  },
+  {
+    symbol: 'USDC',
+    chain: 'ETH',
+    decimals: 6,
+    name: 'USD Coin',
+    logoURI: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png',
+    identifier: 'ETH.USDC-0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+    ticker: 'USDC',
+    address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+    supportedProviders: ['THORCHAIN', 'CHAINFLIP'],
+    preferredProvider: 'CHAINFLIP'
+  }
+];
+
 export const useSwapAssets = () => {
-  const [assets, setAssets] = useState<SwapAsset[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { ready, getSupportedAssets: getSwapKitAssets } = useSwapKitClient();
-  const { getSupportedAssets: getBackendAssets } = useSwapKit();
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [usingFallback, setUsingFallback] = useState(false);
+  
+  const { getSupportedAssets } = useSwapKit();
 
   useEffect(() => {
-    fetchAssets();
-  }, [ready]);
-
-  const fetchAssets = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      console.log('Fetching assets...');
-      
-      // Try backend first (Supabase functions)
+    const fetchAssets = async () => {
       try {
-        console.log('Trying backend assets...');
-        const backendAssets = await getBackendAssets();
+        setLoading(true);
+        setError(null);
         
-        if (backendAssets && Array.isArray(backendAssets) && backendAssets.length > 0) {
-          // Transform backend assets to match our interface
-          const transformedAssets = backendAssets.map((asset: any) => ({
-            chain: asset.chain || 'Unknown',
-            chainId: asset.chainId || asset.chain,
-            ticker: asset.symbol || asset.ticker,
-            identifier: asset.identifier || asset.symbol || `${asset.chain}.${asset.symbol}`,
-            symbol: asset.symbol || asset.ticker,
-            name: asset.name || asset.symbol,
-            decimals: asset.decimals || 18,
-            logoURI: asset.logoURI,
-            coingeckoId: asset.coingeckoId,
-            address: asset.address
-          }));
-          
-          setAssets(transformedAssets);
-          console.log(`Loaded ${transformedAssets.length} tokens from backend`);
-          return;
+        console.log('Fetching supported assets from Supabase...');
+        const response = await getSupportedAssets();
+        
+        console.log('Supabase response:', response);
+        
+        if (response && response.assets && Array.isArray(response.assets) && response.assets.length > 0) {
+          console.log(`Successfully loaded ${response.assets.length} assets from backend`);
+          setAssets(response.assets);
+          setDebugInfo(response.debug || response.providerStats);
+          setUsingFallback(false);
+        } else {
+          console.warn('Backend returned empty or invalid assets, using fallback data');
+          console.log('Backend response debug:', response);
+          setAssets(mockAssets);
+          setDebugInfo(response);
+          setUsingFallback(true);
+          setError('Backend returned no assets - using fallback data');
         }
-      } catch (backendError) {
-        console.warn('Backend assets failed, trying SwapKit client:', backendError);
+      } catch (err) {
+        console.error('Error fetching assets from backend:', err);
+        console.log('Using fallback mock data due to error');
+        setAssets(mockAssets);
+        setUsingFallback(true);
+        setError(err instanceof Error ? err.message : 'Failed to fetch assets');
+      } finally {
+        setLoading(false);
       }
-      
-      // Try SwapKit client if ready
-      if (ready) {
-        try {
-          console.log('Trying SwapKit client assets...');
-          const swapKitAssets = await getSwapKitAssets();
-          
-          if (swapKitAssets && Array.isArray(swapKitAssets) && swapKitAssets.length > 0) {
-            setAssets(swapKitAssets);
-            console.log(`Loaded ${swapKitAssets.length} tokens from SwapKit client`);
-            return;
-          }
-        } catch (swapKitError) {
-          console.warn('SwapKit client assets failed:', swapKitError);
-        }
-      }
-      
-      // Enhanced fallback with comprehensive and correct token list
-      console.log('Using enhanced fallback mock data');
-      const mockAssets: SwapAsset[] = [
-        { 
-          chain: 'BTC', 
-          chainId: 'bitcoin',
-          ticker: 'BTC',
-          identifier: 'BTC.BTC',
-          symbol: 'BTC', 
-          name: 'Bitcoin', 
-          decimals: 8,
-          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/btc.btc.png',
-          coingeckoId: 'bitcoin'
-        },
-        { 
-          chain: 'ETH', 
-          chainId: '1',
-          ticker: 'ETH',
-          identifier: 'ETH.ETH',
-          symbol: 'ETH', 
-          name: 'Ethereum', 
-          decimals: 18,
-          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/eth.eth.png',
-          coingeckoId: 'ethereum'
-        },
-        { 
-          chain: 'ETH', 
-          chainId: '1',
-          ticker: 'USDT',
-          identifier: 'ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7',
-          symbol: 'USDT', 
-          name: 'Tether USD', 
-          decimals: 6,
-          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/eth.usdt-0xdac17f958d2ee523a2206206994597c13d831ec7.png',
-          address: '0xdAC17F958D2ee523a2206206994597C13D831ec7'
-        },
-        { 
-          chain: 'ETH', 
-          chainId: '1',
-          ticker: 'USDC',
-          identifier: 'ETH.USDC-0XA0B86A33E6441E6C8D089D6C22013C4B8D6F4F6A',
-          symbol: 'USDC', 
-          name: 'USD Coin', 
-          decimals: 6,
-          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/eth.usdc-0xa0b86a33e6441e6c8d089d6c22013c4b8d6f4f6a.png',
-          address: '0xA0b86a33E6441E6C8D089D6C22013C4B8D6F4F6A'
-        },
-        { 
-          chain: 'AVAX', 
-          chainId: '43114',
-          ticker: 'AVAX',
-          identifier: 'AVAX.AVAX',
-          symbol: 'AVAX', 
-          name: 'Avalanche', 
-          decimals: 18,
-          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/avax.avax.png',
-          coingeckoId: 'avalanche-2'
-        },
-        { 
-          chain: 'BSC', 
-          chainId: '56',
-          ticker: 'BNB',
-          identifier: 'BSC.BNB',
-          symbol: 'BNB', 
-          name: 'BNB Chain', 
-          decimals: 18,
-          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/bsc.bnb.png',
-          coingeckoId: 'binancecoin'
-        },
-        { 
-          chain: 'DOGE', 
-          chainId: 'dogecoin',
-          ticker: 'DOGE',
-          identifier: 'DOGE.DOGE',
-          symbol: 'DOGE', 
-          name: 'Dogecoin', 
-          decimals: 8,
-          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/doge.doge.png',
-          coingeckoId: 'dogecoin'
-        },
-        { 
-          chain: 'LTC', 
-          chainId: 'litecoin',
-          ticker: 'LTC',
-          identifier: 'LTC.LTC',
-          symbol: 'LTC', 
-          name: 'Litecoin', 
-          decimals: 8,
-          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/ltc.ltc.png',
-          coingeckoId: 'litecoin'
-        },
-        { 
-          chain: 'SOL', 
-          chainId: 'solana',
-          ticker: 'SOL',
-          identifier: 'SOL.SOL',
-          symbol: 'SOL', 
-          name: 'Solana', 
-          decimals: 9,
-          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/sol.sol.png',
-          coingeckoId: 'solana'
-        },
-        { 
-          chain: 'THOR', 
-          chainId: 'thorchain',
-          ticker: 'RUNE',
-          identifier: 'THOR.RUNE',
-          symbol: 'RUNE', 
-          name: 'THORChain', 
-          decimals: 8,
-          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/thor.rune.png',
-          coingeckoId: 'thorchain'
-        },
-        { 
-          chain: 'MAYA', 
-          chainId: 'mayachain',
-          ticker: 'CACAO',
-          identifier: 'MAYA.CACAO',
-          symbol: 'CACAO', 
-          name: 'Cacao', 
-          decimals: 10,
-          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/maya.cacao.png',
-          coingeckoId: 'cacao'
-        },
-        { 
-          chain: 'ATOM', 
-          chainId: 'cosmoshub-4',
-          ticker: 'ATOM',
-          identifier: 'GAIA.ATOM',
-          symbol: 'ATOM', 
-          name: 'Cosmos Hub', 
-          decimals: 6,
-          logoURI: 'https://storage.googleapis.com/token-list-swapkit/images/gaia.atom.png',
-          coingeckoId: 'cosmos'
-        }
-      ];
-      
-      setAssets(mockAssets);
-      setError('Usando datos de prueba - backend y SwapKit client no disponibles');
-      
-    } catch (err) {
-      console.error('Error fetching swap assets:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load assets');
-      setAssets([]);
-    } finally {
-      setLoading(false);
+    };
+
+    fetchAssets();
+  }, [getSupportedAssets]);
+
+  return { 
+    assets, 
+    loading, 
+    error, 
+    debugInfo, 
+    usingFallback,
+    refetch: () => {
+      setLoading(true);
+      // Re-trigger the effect
+      window.location.reload();
     }
   };
-
-  const refreshAssets = () => {
-    fetchAssets();
-  };
-
-  return { assets, loading, error, refreshAssets };
 };

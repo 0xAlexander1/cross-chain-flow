@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Search, AlertCircle } from 'lucide-react';
+import { ChevronDown, Search, AlertCircle, Info, RefreshCw } from 'lucide-react';
 import { useSwapAssets } from '../hooks/useSwapAssets';
 
 interface TokenSelectorProps {
@@ -17,9 +17,10 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
   label, 
   excludeToken 
 }) => {
-  const { assets, loading } = useSwapAssets();
+  const { assets, loading, error, debugInfo, usingFallback, refetch } = useSwapAssets();
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showDebug, setShowDebug] = useState(false);
 
   const selectedAsset = assets.find(asset => 
     asset.identifier === value || 
@@ -50,9 +51,54 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
 
   return (
     <div className="relative">
-      <label className="block text-sm font-medium text-foreground mb-2">
-        {label}
-      </label>
+      <div className="flex items-center justify-between mb-2">
+        <label className="block text-sm font-medium text-foreground">
+          {label}
+        </label>
+        
+        {/* Debug/Status indicators */}
+        <div className="flex items-center space-x-2">
+          {usingFallback && (
+            <div className="flex items-center space-x-1">
+              <AlertCircle className="w-4 h-4 text-yellow-500" />
+              <span className="text-xs text-yellow-600">Fallback data</span>
+            </div>
+          )}
+          
+          {error && (
+            <button
+              onClick={() => setShowDebug(!showDebug)}
+              className="flex items-center space-x-1 text-xs text-red-600 hover:text-red-700"
+            >
+              <Info className="w-4 h-4" />
+              <span>Debug</span>
+            </button>
+          )}
+          
+          <button
+            onClick={refetch}
+            className="flex items-center space-x-1 text-xs text-muted-foreground hover:text-foreground"
+            title="Refresh tokens"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+      
+      {/* Debug info panel */}
+      {showDebug && (error || debugInfo) && (
+        <div className="mb-2 p-3 bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-lg text-xs">
+          <div className="font-semibold text-yellow-800 dark:text-yellow-200 mb-1">Debug Info:</div>
+          {error && (
+            <div className="text-red-700 dark:text-red-300 mb-1">Error: {error}</div>
+          )}
+          {debugInfo && (
+            <pre className="text-yellow-700 dark:text-yellow-300 whitespace-pre-wrap">
+              {JSON.stringify(debugInfo, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
       
       <button
         onClick={() => setIsOpen(!isOpen)}
@@ -80,6 +126,11 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
             </div>
             <div className="text-sm text-muted-foreground">
               {selectedAsset?.name || selectedAsset?.chain || 'Selecciona un token'}
+              {selectedAsset?.supportedProviders && (
+                <span className="ml-2 text-xs text-blue-600">
+                  ({selectedAsset.supportedProviders.join(', ')})
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -141,6 +192,11 @@ const TokenSelector: React.FC<TokenSelectorProps> = ({
                       </div>
                       <div className="text-sm text-muted-foreground">
                         {asset.name} • {asset.chain}
+                        {asset.supportedProviders && (
+                          <span className="ml-1 text-xs text-blue-600">
+                            ({asset.supportedProviders.join(', ')})
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="text-xs text-muted-foreground font-mono">
