@@ -13,7 +13,7 @@ import { validateSwapInputs } from '../utils/addressValidation';
 
 const ManualSwap = () => {
   const { getSwapDetails, getSwapStatus } = useSwapKit();
-  const { assets, refetch } = useSwapAssets();
+  const { assets, loading: assetsLoading, refetch } = useSwapAssets();
   const { toast } = useToast();
   
   const [fromToken, setFromToken] = useState('BTC.BTC');
@@ -25,6 +25,18 @@ const ManualSwap = () => {
   const [currentStep, setCurrentStep] = useState('form');
   const [txHash, setTxHash] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Wait for assets to load before rendering the form
+  if (assetsLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Cargando tokens disponibles...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleSwapTokens = () => {
     const temp = fromToken;

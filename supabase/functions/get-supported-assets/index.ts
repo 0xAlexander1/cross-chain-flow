@@ -13,26 +13,23 @@ serve(async (req) => {
   }
 
   try {
-    console.log('=== Starting get-supported-assets function ===');
-    
     const swapkitApiKey = Deno.env.get('SWAPKIT_API_KEY');
     if (!swapkitApiKey) {
       console.error('SWAPKIT_API_KEY not found in environment variables');
       throw new Error('SWAPKIT_API_KEY not configured');
     }
-    
-    console.log('SWAPKIT_API_KEY found:', swapkitApiKey.substring(0, 10) + '...');
 
     // Lista de providers en orden de preferencia
     const providers = ['MAYACHAIN', 'THORCHAIN', 'CHAINFLIP'];
     
-    console.log(`Fetching tokens from providers: ${providers.join(', ')}`);
+    if (Deno.env.get('DEBUG')) {
+      console.log(`Fetching tokens from providers: ${providers.join(', ')}`);
+    }
 
     // Para cada provider, consulta /tokens?provider=...
     const promises = providers.map(async (provider) => {
       try {
         const url = `https://api.swapkit.dev/tokens?provider=${provider}`;
-        console.log(`Fetching from URL: ${url}`);
         
         const response = await fetch(url, {
           method: 'GET',
@@ -42,7 +39,9 @@ serve(async (req) => {
           }
         });
 
-        console.log(`Response status for ${provider}: ${response.status} ${response.statusText}`);
+        if (Deno.env.get('DEBUG')) {
+          console.log(`Response status for ${provider}: ${response.status} ${response.statusText}`);
+        }
         
         if (!response.ok) {
           const errorText = await response.text();
@@ -51,7 +50,6 @@ serve(async (req) => {
         }
 
         const data = await response.json();
-        console.log(`Raw response for ${provider}:`, JSON.stringify(data).substring(0, 200) + '...');
         
         // Verificar el formato de la respuesta
         let tokens = [];
@@ -66,8 +64,9 @@ serve(async (req) => {
           return { provider, tokens: [], error: 'Unexpected response format' };
         }
         
-        console.log(`Successfully received ${tokens.length} tokens from ${provider}`);
-        console.log(`First token sample from ${provider}:`, tokens[0] ? JSON.stringify(tokens[0]) : 'No tokens');
+        if (Deno.env.get('DEBUG')) {
+          console.log(`Successfully received ${tokens.length} tokens from ${provider}`);
+        }
         
         return { provider, tokens, error: null };
       } catch (error) {
@@ -93,10 +92,6 @@ serve(async (req) => {
         totalTokensReceived += tokens.length;
       }
     });
-
-    console.log('Provider stats:', providerStats);
-    console.log('Provider errors:', providerErrors);
-    console.log(`Total tokens received: ${totalTokensReceived}`);
 
     // Si todos los providers fallan, devolver error
     const successfulProviders = results.filter(r => !r.error && r.tokens.length > 0);
@@ -146,8 +141,6 @@ serve(async (req) => {
       });
     });
 
-    console.log(`Combined ${allTokens.length} tokens before deduplication`);
-
     // Elimina duplicados por identifier y combina providers
     const tokenMap = new Map();
     allTokens.forEach(token => {
@@ -165,18 +158,7 @@ serve(async (req) => {
     });
 
     const assets = Array.from(tokenMap.values());
-    console.log(`Successfully processed ${assets.length} unique tokens`);
     
-    // Log sample of processed assets
-    if (assets.length > 0) {
-      console.log('Sample processed assets:', assets.slice(0, 3).map(a => ({
-        identifier: a.identifier,
-        symbol: a.symbol,
-        chain: a.chain,
-        providers: a.supportedProviders
-      })));
-    }
-
     const response = {
       assets,
       providerStats,
@@ -189,11 +171,13 @@ serve(async (req) => {
       }
     };
 
-    console.log('Final response summary:', {
-      totalAssets: assets.length,
-      providerStats,
-      hasErrors: Object.keys(providerErrors).length > 0
-    });
+    if (Deno.env.get('DEBUG')) {
+      console.log('Final response summary:', {
+        totalAssets: assets.length,
+        providerStats,
+        hasErrors: Object.keys(providerErrors).length > 0
+      });
+    }
 
     return new Response(
       JSON.stringify(response),

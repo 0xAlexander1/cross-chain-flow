@@ -16,7 +16,7 @@ interface Asset {
   preferredProvider: string;
 }
 
-// Fallback mock data - solo se usa si el backend falla
+// Fallback mock data - only used if backend fails
 const mockAssets: Asset[] = [
   {
     symbol: 'BTC',
@@ -51,6 +51,96 @@ const mockAssets: Asset[] = [
     address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
     supportedProviders: ['THORCHAIN', 'CHAINFLIP'],
     preferredProvider: 'CHAINFLIP'
+  },
+  {
+    symbol: 'AVAX',
+    chain: 'AVAX',
+    decimals: 18,
+    name: 'Avalanche',
+    identifier: 'AVAX.AVAX',
+    ticker: 'AVAX',
+    supportedProviders: ['THORCHAIN'],
+    preferredProvider: 'THORCHAIN'
+  },
+  {
+    symbol: 'DOGE',
+    chain: 'DOGE',
+    decimals: 8,
+    name: 'Dogecoin',
+    identifier: 'DOGE.DOGE',
+    ticker: 'DOGE',
+    supportedProviders: ['THORCHAIN'],
+    preferredProvider: 'THORCHAIN'
+  },
+  {
+    symbol: 'LTC',
+    chain: 'LTC',
+    decimals: 8,
+    name: 'Litecoin',
+    identifier: 'LTC.LTC',
+    ticker: 'LTC',
+    supportedProviders: ['THORCHAIN'],
+    preferredProvider: 'THORCHAIN'
+  },
+  {
+    symbol: 'BCH',
+    chain: 'BCH',
+    decimals: 8,
+    name: 'Bitcoin Cash',
+    identifier: 'BCH.BCH',
+    ticker: 'BCH',
+    supportedProviders: ['THORCHAIN'],
+    preferredProvider: 'THORCHAIN'
+  },
+  {
+    symbol: 'BNB',
+    chain: 'BSC',
+    decimals: 18,
+    name: 'BNB',
+    identifier: 'BSC.BNB',
+    ticker: 'BNB',
+    supportedProviders: ['THORCHAIN'],
+    preferredProvider: 'THORCHAIN'
+  },
+  {
+    symbol: 'ATOM',
+    chain: 'GAIA',
+    decimals: 6,
+    name: 'Cosmos',
+    identifier: 'GAIA.ATOM',
+    ticker: 'ATOM',
+    supportedProviders: ['THORCHAIN'],
+    preferredProvider: 'THORCHAIN'
+  },
+  {
+    symbol: 'RUNE',
+    chain: 'THOR',
+    decimals: 8,
+    name: 'THORChain',
+    identifier: 'THOR.RUNE',
+    ticker: 'RUNE',
+    supportedProviders: ['THORCHAIN'],
+    preferredProvider: 'THORCHAIN'
+  },
+  {
+    symbol: 'CACAO',
+    chain: 'MAYA',
+    decimals: 10,
+    name: 'Maya Protocol',
+    identifier: 'MAYA.CACAO',
+    ticker: 'CACAO',
+    supportedProviders: ['MAYACHAIN'],
+    preferredProvider: 'MAYACHAIN'
+  },
+  {
+    symbol: 'FLIP',
+    chain: 'ETH',
+    decimals: 18,
+    name: 'Chainflip',
+    identifier: 'ETH.FLIP',
+    ticker: 'FLIP',
+    supportedProviders: ['CHAINFLIP'],
+    preferredProvider: 'CHAINFLIP'
   }
 ];
 
@@ -64,42 +154,55 @@ export const useSwapAssets = () => {
   const { getSupportedAssets } = useSwapKit();
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchAssets = async () => {
+      if (cancelled) return;
+      
+      setLoading(true);
+      setError(null);
+      
       try {
-        setLoading(true);
-        setError(null);
-        
-        console.log('Fetching supported assets from Supabase...');
         const response = await getSupportedAssets();
         
-        console.log('Supabase response:', response);
+        if (cancelled) return;
         
         if (response && response.assets && Array.isArray(response.assets) && response.assets.length > 0) {
-          console.log(`Successfully loaded ${response.assets.length} assets from backend`);
           setAssets(response.assets);
           setDebugInfo(response.debug || response.providerStats);
           setUsingFallback(false);
         } else {
           console.warn('Backend returned empty or invalid assets, using fallback data');
-          console.log('Backend response debug:', response);
           setAssets(mockAssets);
           setDebugInfo(response);
           setUsingFallback(true);
           setError('Backend returned no assets - using fallback data');
         }
       } catch (err) {
-        console.error('Error fetching assets from backend:', err);
-        console.log('Using fallback mock data due to error');
-        setAssets(mockAssets);
-        setUsingFallback(true);
-        setError(err instanceof Error ? err.message : 'Failed to fetch assets');
+        if (!cancelled) {
+          console.warn('Falling back to mock assets:', err instanceof Error ? err.message : 'Unknown error');
+          setAssets(mockAssets);
+          setUsingFallback(true);
+          setError(err instanceof Error ? err.message : 'Failed to fetch assets');
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     fetchAssets();
-  }, [getSupportedAssets]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, []); // Empty dependency array - execute ONLY on mount
+
+  const refetch = () => {
+    // Force re-fetch by reloading the page (simple approach)
+    window.location.reload();
+  };
 
   return { 
     assets, 
@@ -107,10 +210,6 @@ export const useSwapAssets = () => {
     error, 
     debugInfo, 
     usingFallback,
-    refetch: () => {
-      setLoading(true);
-      // Re-trigger the effect
-      window.location.reload();
-    }
+    refetch
   };
 };
