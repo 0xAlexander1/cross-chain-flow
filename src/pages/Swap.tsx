@@ -21,7 +21,7 @@ const Swap = () => {
     addresses, 
     disconnectWallet,
     loading,
-    error 
+    error: clientError 
   } = useSwapKitClient();
   
   const { getSwapDetails, getSwapStatus } = useSwapKit();
@@ -188,7 +188,7 @@ const Swap = () => {
   };
 
   // Show loading if SwapKit is not ready
-  if (!ready && !error) {
+  if (!ready && !clientError) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="text-center">
@@ -201,7 +201,7 @@ const Swap = () => {
   }
 
   // Show error if SwapKit failed to initialize
-  if (error && !ready) {
+  if (clientError && !ready) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <motion.div
@@ -209,12 +209,12 @@ const Swap = () => {
           animate={{ opacity: 1, y: 0 }}
           className="text-center max-w-md"
         >
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-6" />
+          <AlertCircle className="w-16 h-16 text-yellow-500 mx-auto mb-6" />
           <h2 className="text-2xl font-bold text-foreground mb-4">
-            Error de inicialización
+            Modo Limitado
           </h2>
           <p className="text-muted-foreground mb-8">
-            {error}
+            {clientError}
           </p>
           <div className="space-y-3">
             <Button onClick={() => window.location.reload()}>

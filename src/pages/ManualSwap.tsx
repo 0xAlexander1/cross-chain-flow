@@ -1,33 +1,40 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useSwapAssets } from '../hooks/useSwapAssets';
 import { useSwapKit } from '../hooks/useSwapKit';
 import { SwapConfirmation } from '../components/SwapConfirmation';
 import { SwapProgress } from '../components/SwapProgress';
 import ProviderComparison from '../components/ProviderComparison';
 import TokenSelector from '../components/TokenSelector';
-import { useToast } from '@/hooks/use-toast';
+import { Input } from '../components/ui/input';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { useSwapAssets } from '../hooks/useSwapAssets';
 import { validateSwapInputs } from '../utils/addressValidation';
 
 const ManualSwap = () => {
-  const { assets, loading: assetsLoading, error: assetsError, refreshAssets } = useSwapAssets();
-  const { getSwapDetails, getSwapStatus, loading: swapLoading, error: swapError } = useSwapKit();
+  const { getSwapDetails, getSwapStatus } = useSwapKit();
+  const { assets, refetch } = useSwapAssets();
   const { toast } = useToast();
   
   const [fromToken, setFromToken] = useState('BTC.BTC');
   const [toToken, setToToken] = useState('ETH.ETH');
   const [amount, setAmount] = useState('');
-  const [destinationAddress, setDestinationAddress] = useState('');
+  const [recipient, setRecipient] = useState('');
   const [swapRoutes, setSwapRoutes] = useState(null);
   const [selectedRoute, setSelectedRoute] = useState(null);
   const [currentStep, setCurrentStep] = useState('form');
   const [txHash, setTxHash] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleGetSwapDetails = async () => {
+  const handleSwapTokens = () => {
+    const temp = fromToken;
+    setFromToken(toToken);
+    setToToken(temp);
+  };
+
+  const handleEstimate = async () => {
     // Enhanced validations using the utility function
-    const validationError = validateSwapInputs(fromToken, toToken, amount, destinationAddress);
+    const validationError = validateSwapInputs(fromToken, toToken, amount, recipient);
     if (validationError) {
       toast({
         title: "Error de validación",
@@ -38,12 +45,12 @@ const ManualSwap = () => {
     }
 
     try {
-      console.log('Getting swap details for:', { fromToken, toToken, amount, destinationAddress });
-      
-      const details = await getSwapDetails(fromToken, toToken, amount, destinationAddress);
-      
-      console.log('Swap details received:', details);
-      
+      setLoading(true);
+
+      console.log('Getting swap estimate:', { fromToken, toToken, amount, recipient });
+
+      const details = await getSwapDetails(fromToken, toToken, amount, recipient);
+
       if (details && details.routes && details.routes.length > 0) {
         setSwapRoutes(details);
         
@@ -55,7 +62,7 @@ const ManualSwap = () => {
             description: `Encontramos ${details.routes.length} opciones para tu swap`,
           });
         } else {
-          // Single route, go directly to confirmation
+          // Single route, show details
           const fromAsset = assets.find(asset => asset.identifier === fromToken);
           const toAsset = assets.find(asset => asset.identifier === toToken);
           
@@ -64,12 +71,12 @@ const ManualSwap = () => {
             fromAsset,
             toAsset,
             exactAmount: amount,
-            recipient: destinationAddress
+            recipient
           });
           setCurrentStep('confirmation');
           
           toast({
-            title: "Cotización obtenida",
+            title: "Estimación obtenida",
             description: `Recibirás aproximadamente ${details.routes[0].expectedOutput} ${toAsset?.ticker}`,
           });
         }
@@ -80,13 +87,16 @@ const ManualSwap = () => {
           variant: "destructive"
         });
       }
+      
     } catch (error) {
-      console.error('Error getting swap details:', error);
+      console.error('Error getting estimate:', error);
       toast({
-        title: "Error al obtener detalles",
-        description: error instanceof Error ? error.message : "No se pudieron obtener los detalles del swap",
+        title: "Error en estimación",
+        description: error instanceof Error ? error.message : "No se pudo obtener la estimación",
         variant: "destructive"
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -99,7 +109,7 @@ const ManualSwap = () => {
       fromAsset,
       toAsset,
       exactAmount: amount,
-      recipient: destinationAddress
+      recipient
     });
     setCurrentStep('confirmation');
     
@@ -132,42 +142,13 @@ const ManualSwap = () => {
     setSelectedRoute(null);
     setTxHash('');
     setAmount('');
-    setDestinationAddress('');
+    setRecipient('');
   };
 
-  const getToChain = () => {
-    return toToken.split('.')[0];
+  // Get ticker from identifier for display
+  const getTickerFromIdentifier = (identifier: string) => {
+    return identifier.split('.')[1] || identifier;
   };
-
-  // Loading state
-  if (assetsLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <h2 className="text-xl font-bold text-foreground mb-2">Cargando tokens...</h2>
-          <p className="text-muted-foreground">Obteniendo lista de tokens disponibles</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Error state
-  if (assetsError && assets.length === 0) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="text-center max-w-md">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-foreground mb-2">Error al cargar tokens</h2>
-          <p className="text-muted-foreground mb-4">{assetsError}</p>
-          <Button onClick={refreshAssets} className="flex items-center space-x-2">
-            <RefreshCw className="w-4 h-4" />
-            <span>Reintentar</span>
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen py-8 px-4">
@@ -178,10 +159,10 @@ const ManualSwap = () => {
           className="text-center mb-8"
         >
           <h1 className="text-3xl font-bold text-foreground mb-4">
-            Swap Manual
+            Intercambio Manual Cross-Chain
           </h1>
           <p className="text-muted-foreground">
-            Intercambia desde cualquier wallet sin conectarla a la web
+            Intercambia tokens proporcionando tu propia dirección de destino
           </p>
         </motion.div>
 
@@ -189,148 +170,108 @@ const ManualSwap = () => {
           {currentStep === 'form' && (
             <motion.div
               key="form"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
               className="bg-card border border-border rounded-2xl p-6 shadow-lg"
             >
-              {/* Alert Info */}
-              <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 mb-6">
-                <div className="flex items-start space-x-3">
-                  <div className="text-primary text-xl">ℹ️</div>
-                  <div>
-                    <h3 className="font-semibold text-primary mb-1">Modo Manual</h3>
-                    <p className="text-sm text-foreground">
-                      Perfecto para wallets de hardware (Ledger, Trezor) o móviles. 
-                      No necesitas conectar tu wallet a esta web.
-                    </p>
+              {/* From Token */}
+              <div className="mb-4">
+                <TokenSelector
+                  value={fromToken}
+                  onChange={setFromToken}
+                  label="Desde"
+                  excludeToken={toToken}
+                />
+                <div className="mt-3">
+                  <Input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0.0"
+                    className="text-right text-xl font-bold"
+                    step="any"
+                    min="0"
+                  />
+                  <div className="flex justify-between mt-2 text-sm text-muted-foreground">
+                    <span>Cantidad a enviar</span>
+                    <span>{getTickerFromIdentifier(fromToken)}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Assets Error Warning */}
-              {assetsError && (
-                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 mb-6">
-                  <div className="flex items-start space-x-3">
-                    <div className="text-yellow-600 text-xl">⚠️</div>
-                    <div>
-                      <h3 className="font-semibold text-yellow-600 mb-1">Aviso</h3>
-                      <p className="text-sm text-foreground">
-                        {assetsError}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* Swap Button */}
+              <div className="flex justify-center my-6">
+                <button
+                  onClick={handleSwapTokens}
+                  className="p-3 rounded-full border border-border hover:bg-accent transition-all duration-200 hover:scale-110"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                  </svg>
+                </button>
+              </div>
 
-              {/* Form */}
-              <div className="space-y-6">
-                {/* From Token */}
-                <TokenSelector
-                  value={fromToken}
-                  onChange={setFromToken}
-                  label="Token de origen"
-                  excludeToken={toToken}
-                />
-
-                {/* Swap Button */}
-                <div className="flex justify-center">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const temp = fromToken;
-                      setFromToken(toToken);
-                      setToToken(temp);
-                    }}
-                    className="rounded-full p-2"
-                  >
-                    ↕️
-                  </Button>
-                </div>
-
-                {/* To Token */}
+              {/* To Token */}
+              <div className="mb-4">
                 <TokenSelector
                   value={toToken}
                   onChange={setToToken}
-                  label="Token de destino"
+                  label="Hacia"
                   excludeToken={fromToken}
                 />
-
-                {/* Amount */}
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Cantidad a enviar
-                  </label>
-                  <input
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder={`0.0 ${assets.find(a => a.identifier === fromToken)?.ticker || ''}`}
-                    className="w-full bg-background border border-border rounded-lg px-4 py-3 text-foreground placeholder-muted-foreground text-lg font-mono"
-                    step="any"
-                    min="0"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Debe ser mayor a 0
-                  </p>
-                </div>
-
-                {/* Destination Address */}
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">
-                    Dirección de destino ({getToChain()})
-                  </label>
-                  <input
+                <div className="mt-3">
+                  <Input
                     type="text"
-                    value={destinationAddress}
-                    onChange={(e) => setDestinationAddress(e.target.value)}
-                    placeholder={`Tu dirección de ${getToChain()}`}
-                    className="w-full bg-background border border-border rounded-lg px-4 py-3 text-foreground placeholder-muted-foreground font-mono text-sm"
+                    value={swapRoutes?.bestRoute?.expectedOutput || ''}
+                    placeholder="0.0"
+                    readOnly
+                    className="text-right text-xl font-bold bg-muted"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Asegúrate de que la dirección sea correcta y válida para {getToChain()}. Las transacciones son irreversibles.
-                  </p>
-                </div>
-
-                {/* Generate Button */}
-                <Button
-                  onClick={handleGetSwapDetails}
-                  disabled={!amount || !destinationAddress || swapLoading}
-                  className="w-full"
-                  size="lg"
-                >
-                  {swapLoading ? (
-                    <div className="flex items-center space-x-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      <span>Obteniendo cotización...</span>
-                    </div>
-                  ) : (
-                    'Obtener Cotización'
-                  )}
-                </Button>
-
-                {/* Swap Error */}
-                {swapError && (
-                  <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
-                    <div className="flex items-start space-x-3">
-                      <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
-                      <div>
-                        <h4 className="font-semibold text-red-600 mb-1">Error</h4>
-                        <p className="text-sm text-foreground">{swapError}</p>
-                      </div>
-                    </div>
+                  <div className="flex justify-between mt-2 text-sm text-muted-foreground">
+                    <span>Recibirás (estimado)</span>
+                    <span>{getTickerFromIdentifier(toToken)}</span>
                   </div>
-                )}
+                </div>
+              </div>
 
-                {/* Debug info */}
-                <div className="text-xs text-muted-foreground text-center">
-                  {assets.length} tokens disponibles
-                  {assetsError && (
-                    <span className="ml-2 text-yellow-600">
-                      (usando datos de prueba)
-                    </span>
-                  )}
+              {/* Recipient Address */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Dirección de destino ({toToken.split('.')[0]})
+                </label>
+                <Input
+                  type="text"
+                  value={recipient}
+                  onChange={(e) => setRecipient(e.target.value)}
+                  placeholder={`Ingresa tu dirección ${toToken.split('.')[0]}`}
+                  className="font-mono text-sm"
+                />
+                <div className="text-xs text-muted-foreground mt-1">
+                  Los tokens se enviarán a esta dirección
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-3">
+                <Button
+                  onClick={handleEstimate}
+                  disabled={!amount || !recipient || loading}
+                  className="w-full"
+                  variant="secondary"
+                >
+                  {loading ? 'Estimando...' : 'Estimar Swap'}
+                </Button>
+                
+                <div className="flex space-x-3">
+                  <Button
+                    onClick={refetch}
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                  >
+                    🔄 Actualizar Tokens
+                  </Button>
                 </div>
               </div>
             </motion.div>

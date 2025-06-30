@@ -1,62 +1,123 @@
 
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
-// Add error boundary for SwapKit imports
+// SwapKit imports with error handling
 let SwapKitApi: any = null;
-let keystoreWallet: any = null;
-let xdefiWallet: any = null;
-let keplrWallet: any = null;
+let walletModules: any = {};
 
 try {
-  // Import SwapKitApi instead of SwapKitCore
+  // Import SwapKit core
   const swapKitCore = require('@swapkit/core');
   SwapKitApi = swapKitCore.SwapKitApi;
   
-  // Individual wallet imports with error handling
-  const keystoreModule = require('@swapkit/wallet-keystore');
-  keystoreWallet = keystoreModule.keystoreWallet;
+  // Import wallet modules
+  try {
+    const keystoreModule = require('@swapkit/wallet-keystore');
+    walletModules.keystore = keystoreModule.keystoreWallet;
+  } catch (e) {
+    console.warn('Keystore wallet not available:', e);
+  }
   
-  const xdefiModule = require('@swapkit/wallet-xdefi');
-  xdefiWallet = xdefiModule.xdefiWallet;
+  try {
+    const xdefiModule = require('@swapkit/wallet-xdefi');
+    walletModules.xdefi = xdefiModule.xdefiWallet;
+  } catch (e) {
+    console.warn('XDEFI wallet not available:', e);
+  }
   
-  const keplrModule = require('@swapkit/wallet-keplr');
-  keplrWallet = keplrModule.keplrWallet;
+  try {
+    const keplrModule = require('@swapkit/wallet-keplr');
+    walletModules.keplr = keplrModule.keplrWallet;
+  } catch (e) {
+    console.warn('Keplr wallet not available:', e);
+  }
+  
 } catch (error) {
-  console.warn('SwapKit modules not available:', error);
+  console.warn('SwapKit core not available:', error);
 }
 
 export const useSwapKitClient = () => {
   const [client, setClient] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [connectedWallets, setConnectedWallets] = useState<string[]>([]);
-  const [ready, setReady] = useState(!!SwapKitApi);
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [addresses, setAddresses] = useState<Record<string, string>>({});
+  const [initError, setInitError] = useState<string | null>(null);
 
-  // Supported wallets that we have packages for
+  // Supported wallets based on available modules
   const supportedWallets = ['KEYSTORE', 'XDEFI', 'KEPLR', 'METAMASK'];
 
   // Get the first connected wallet as the primary one
   const connectedWallet = connectedWallets.length > 0 ? connectedWallets[0] : null;
 
+  // Initialize SwapKit client
+  useEffect(() => {
+    const initializeClient = async () => {
+      if (!SwapKitApi) {
+        setInitError('SwapKit no está disponible. Usando modo fallback.');
+        setReady(false);
+        return;
+      }
+
+      try {
+        console.log('Initializing SwapKit client...');
+        
+        // Get API key from environment variables
+        const apiKey = import.meta.env.VITE_SWAPKIT_API_KEY;
+        
+        if (!apiKey) {
+          console.warn('VITE_SWAPKIT_API_KEY not found, using fallback mode');
+          setInitError('API key no configurada. Funcionalidad limitada.');
+          setReady(false);
+          return;
+        }
+
+        // Initialize SwapKit with configuration
+        const swapKitClient = SwapKitApi({
+          config: {
+            apiKey: apiKey,
+            stagenet: false, // Use mainnet
+            blockchairApiKey: '', // Optional
+            covalentApiKey: '', // Optional
+            ethplorerApiKey: '', // Optional
+          }
+        });
+
+        console.log('SwapKit client initialized successfully');
+        setClient(swapKitClient);
+        setReady(true);
+        setInitError(null);
+        
+      } catch (error) {
+        console.error('Failed to initialize SwapKit client:', error);
+        setInitError(error instanceof Error ? error.message : 'Error de inicialización');
+        setReady(false);
+      }
+    };
+
+    initializeClient();
+  }, []);
+
   const getSupportedAssets = useCallback(async () => {
     if (!client) {
+      console.warn('SwapKit client not available, using Supabase fallback');
       throw new Error('SwapKit client not initialized');
     }
     
     try {
-      // Try to get supported assets from client
+      console.log('Getting supported assets from SwapKit...');
       const assets = await client.getSupportedAssets?.();
       return assets || [];
     } catch (error) {
       console.warn('Failed to get assets from SwapKit client:', error);
-      return [];
+      throw error;
     }
   }, [client]);
 
   const connectWallet = useCallback(async (walletType: string, options?: any) => {
-    if (!SwapKitApi) {
-      throw new Error('SwapKit not available - using fallback mode');
+    if (!SwapKitApi || !client) {
+      throw new Error('SwapKit no está disponible');
     }
 
     setLoading(true);
@@ -69,37 +130,37 @@ export const useSwapKitClient = () => {
       
       switch (walletType) {
         case 'KEYSTORE':
-          if (!keystoreWallet) {
-            throw new Error('Keystore wallet package not available');
+          if (!walletModules.keystore) {
+            throw new Error('Keystore wallet module not available');
           }
           if (!options?.phrase) {
             throw new Error('Seed phrase is required for Keystore wallet');
           }
-          walletClient = keystoreWallet({
+          walletClient = walletModules.keystore({
             phrase: options.phrase,
-            chains: ['BTC', 'ETH', 'THORCHAIN']
+            chains: ['BTC', 'ETH', 'THORCHAIN', 'MAYA']
           });
           break;
           
         case 'XDEFI':
-          if (!xdefiWallet) {
-            throw new Error('XDEFI wallet package not available');
+          if (!walletModules.xdefi) {
+            throw new Error('XDEFI wallet module not available');
           }
           // @ts-ignore - XDEFI wallet may not be available
           if (typeof window !== 'undefined' && window.xfi) {
-            walletClient = xdefiWallet();
+            walletClient = walletModules.xdefi();
           } else {
             throw new Error('XDEFI wallet not found. Please install XDEFI extension.');
           }
           break;
           
         case 'KEPLR':
-          if (!keplrWallet) {
-            throw new Error('Keplr wallet package not available');
+          if (!walletModules.keplr) {
+            throw new Error('Keplr wallet module not available');
           }
           // @ts-ignore - Keplr wallet may not be available
           if (typeof window !== 'undefined' && window.keplr) {
-            walletClient = keplrWallet();
+            walletClient = walletModules.keplr();
           } else {
             throw new Error('Keplr wallet not found. Please install Keplr extension.');
           }
@@ -126,26 +187,16 @@ export const useSwapKitClient = () => {
           throw new Error(`Unsupported wallet type: ${walletType}`);
       }
 
-      // Initialize SwapKit client if we have a wallet
+      // Connect the wallet to SwapKit
       if (walletClient) {
-        const swapKitClient = SwapKitApi({
-          config: {
-            stagenet: false, // Use mainnet
-            blockchairApiKey: '', // Add if needed
-            covalentApiKey: '', // Add if needed
-            ethplorerApiKey: '', // Add if needed
-          }
-        });
-
-        // Connect the wallet to SwapKit
-        const connectedClient = await swapKitClient.connectWallet(walletClient);
+        const connectedClient = await client.connectWallet(walletClient);
         
         setClient(connectedClient);
         setConnectedWallets(prev => [...prev, walletType]);
         
         // Get wallet addresses for different chains
         const walletAddresses: Record<string, string> = {};
-        const chains = ['BTC', 'ETH', 'THORCHAIN', 'ATOM', 'DOGE', 'LTC'];
+        const chains = ['BTC', 'ETH', 'THORCHAIN', 'MAYA', 'ATOM', 'DOGE', 'LTC'];
         
         for (const chain of chains) {
           try {
@@ -169,15 +220,28 @@ export const useSwapKitClient = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [client]);
 
   const disconnectWallet = useCallback(async () => {
     try {
       // Clear all wallet state
       setConnectedWallets([]);
       setAddresses({});
-      setClient(null);
       setError(null);
+      
+      // Reinitialize client without wallets
+      if (SwapKitApi) {
+        const apiKey = import.meta.env.VITE_SWAPKIT_API_KEY;
+        if (apiKey) {
+          const swapKitClient = SwapKitApi({
+            config: {
+              apiKey: apiKey,
+              stagenet: false,
+            }
+          });
+          setClient(swapKitClient);
+        }
+      }
       
       console.log('Wallet disconnected');
     } catch (error) {
@@ -188,16 +252,8 @@ export const useSwapKitClient = () => {
   }, []);
 
   const getWalletAddress = useCallback((chain: string) => {
-    if (!client) return null;
-    
-    try {
-      // Try to get address for the specified chain
-      return client.getWalletAddress?.(chain) || null;
-    } catch (error) {
-      console.warn(`Failed to get address for chain ${chain}:`, error);
-      return null;
-    }
-  }, [client]);
+    return addresses[chain] || null;
+  }, [addresses]);
 
   return {
     client,
@@ -209,9 +265,9 @@ export const useSwapKitClient = () => {
     connectedWallets,
     connectedWallet,
     addresses,
-    error,
+    error: error || initError,
     supportedWallets,
     isConnected: connectedWallets.length > 0,
-    ready
+    ready: ready && !initError
   };
 };
