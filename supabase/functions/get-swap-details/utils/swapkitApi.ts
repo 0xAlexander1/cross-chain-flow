@@ -28,6 +28,24 @@ export const fetchSwapQuote = async (request: SwapRequest, apiKey: string) => {
   if (!response.ok) {
     const errorText = await response.text();
     console.error('SwapKit quote error:', errorText);
+    
+    // Don't throw immediately - let's see if we got partial data
+    try {
+      const errorData = JSON.parse(errorText);
+      // If we have routes despite errors, continue
+      if (errorData.routes && errorData.routes.length > 0) {
+        console.log('⚠️ API returned errors but has routes:', errorData.routes.length);
+        return errorData;
+      }
+      // If we have provider errors but some succeeded, continue
+      if (errorData.providerErrors) {
+        console.log('⚠️ Provider errors:', errorData.providerErrors);
+        return errorData;
+      }
+    } catch (parseError) {
+      // If we can't parse, throw the original error
+    }
+    
     throw new Error(`SwapKit quote API error: ${response.status}`);
   }
 

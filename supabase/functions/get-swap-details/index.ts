@@ -22,27 +22,42 @@ serve(async (req) => {
 
     console.log('Getting swap details for:', { fromAsset, toAsset, amount, recipient });
 
-    const quoteData = await fetchSwapQuote(
-      { fromAsset, toAsset, amount, recipient }, 
-      swapkitApiKey
-    );
+    let quoteData;
+    try {
+      quoteData = await fetchSwapQuote(
+        { fromAsset, toAsset, amount, recipient }, 
+        swapkitApiKey
+      );
+    } catch (error) {
+      console.error('SwapKit API error:', error);
+      // Return a structured error instead of throwing
+      return createErrorResponse(`SwapKit API error: ${error.message}`);
+    }
 
     console.log('Quote data received:', quoteData);
 
     // 🔍 Debug: Log raw routes data for inspection
-    console.log('🔍 Raw routes data:', JSON.stringify(quoteData.routes, null, 2));
+    console.log('🔍 Raw routes data:', JSON.stringify(quoteData.routes || [], null, 2));
 
     // Also log providers specifically
-    if (quoteData.routes) {
-      console.log('🔍 Providers found:', quoteData.routes.map((r: any) => ({
-        provider: r.providers?.[0] || r.provider || 'Unknown',
+    if (quoteData.routes && Array.isArray(quoteData.routes)) {
+      console.log('🔍 Raw providers found:', quoteData.routes.map((r: any) => ({
+        provider: r.providers?.[0] || r.provider || r.meta?.provider || 'Unknown',
         hasDepositAddress: !!(r.targetAddress || r.inboundAddress || r.depositAddress),
         hasMemo: !!(r.memo || r.transaction?.memo)
       })));
     }
 
+    // Handle provider errors gracefully
+    if (quoteData.providerErrors && Array.isArray(quoteData.providerErrors)) {
+      console.log('⚠️ Provider errors received:', quoteData.providerErrors);
+      quoteData.providerErrors.forEach((error: any) => {
+        console.log(`⚠️ ${error.provider} error: ${error.message}`);
+      });
+    }
+
     // Check if we have routes - handle gracefully instead of throwing
-    if (!quoteData.routes || quoteData.routes.length === 0) {
+    if (!quoteData.routes || !Array.isArray(quoteData.routes) || quoteData.routes.length === 0) {
       console.warn('⚠️ No routes from any provider:', quoteData);
       return createNoRoutesResponse();
     }
@@ -51,6 +66,11 @@ serve(async (req) => {
     const processedRoutes = processRoutes(quoteData.routes, recipient);
 
     console.log('Processed routes:', processedRoutes);
+
+    if (processedRoutes.length === 0) {
+      console.warn('⚠️ No valid routes after processing');
+      return createNoRoutesResponse();
+    }
 
     // Return all routes for comparison
     const response = {
