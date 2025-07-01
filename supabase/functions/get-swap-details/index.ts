@@ -46,7 +46,9 @@ serve(async (req) => {
       throw new Error('SWAPKIT_API_KEY not found in environment variables');
     }
 
-    // Get swap quote from SwapKit API with multiple providers (prioritizing MAYACHAIN, THORCHAIN, CHAINFLIP)
+    // Get swap quote from SwapKit API with MAYACHAIN as first priority
+    console.log('🔍 Requesting providers: MAYACHAIN, THORCHAIN, CHAINFLIP');
+    
     const quoteResponse = await fetch('https://api.swapkit.dev/quote', {
       method: 'POST',
       headers: {
@@ -59,7 +61,7 @@ serve(async (req) => {
         buyAsset: toAsset,
         sellAmount: amount,
         recipientAddress: recipient,
-        providers: ['MAYACHAIN', 'THORCHAIN', 'CHAINFLIP'] // Multiple providers in order of preference
+        providers: ['MAYACHAIN', 'THORCHAIN', 'CHAINFLIP'] // MAYACHAIN first
       })
     });
 
@@ -74,6 +76,15 @@ serve(async (req) => {
 
     // 🔍 Debug: Log raw routes data for inspection
     console.log('🔍 Raw routes data:', JSON.stringify(quoteData.routes, null, 2));
+
+    // Also log providers specifically
+    if (quoteData.routes) {
+      console.log('🔍 Providers found:', quoteData.routes.map((r: any) => ({
+        provider: r.providers?.[0] || r.provider || 'Unknown',
+        hasDepositAddress: !!(r.targetAddress || r.inboundAddress || r.depositAddress),
+        hasMemo: !!(r.memo || r.transaction?.memo)
+      })));
+    }
 
     // Check if we have routes - handle gracefully instead of throwing
     if (!quoteData.routes || quoteData.routes.length === 0) {
@@ -101,16 +112,33 @@ serve(async (req) => {
         route.targetAddress ||
         route.depositAddress ||
         route.meta?.chainflip?.depositAddress ||
+        route.meta?.mayachain?.depositAddress ||
         ''
       );
     };
 
     const getMemo = (route: any, recipient: string) => {
-      let memo = route.transaction?.memo || route.memo || '';
+      let memo = route.transaction?.memo || route.memo || route.meta?.memo || '';
       if (memo.includes('{destinationAddress}')) {
         memo = memo.replace('{destinationAddress}', recipient);
       }
       return memo;
+    };
+
+    const getProviderName = (route: any) => {
+      // Check multiple possible locations for provider name
+      const provider = route.providers?.[0] || route.provider || route.meta?.provider;
+      
+      // Normalize provider names
+      if (typeof provider === 'string') {
+        const upperProvider = provider.toUpperCase();
+        if (upperProvider.includes('MAYA')) return 'MAYACHAIN';
+        if (upperProvider.includes('THOR')) return 'THORCHAIN';
+        if (upperProvider.includes('CHAINFLIP') || upperProvider.includes('FLIP')) return 'CHAINFLIP';
+        return provider;
+      }
+      
+      return 'Unknown';
     };
 
     // Process all available routes for comparison
@@ -130,8 +158,8 @@ serve(async (req) => {
         estimatedTime = '5-10 min';
       }
 
-      return {
-        provider: route.providers?.[0] || route.provider || 'Unknown',
+      const processedRoute = {
+        provider: getProviderName(route),
         depositAddress: getDepositAddress(route),
         memo: getMemo(route, recipient),
         expectedOutput: route.expectedBuyAmount || route.expectedOutput || route.expectedOutputUSD,
@@ -145,6 +173,15 @@ serve(async (req) => {
           return sum + (isNaN(feeAmount) ? 0 : feeAmount);
         }, 0) : 0
       };
+
+      console.log('🔍 Processed route:', {
+        provider: processedRoute.provider,
+        hasDepositAddress: !!processedRoute.depositAddress,
+        hasMemo: !!processedRoute.memo,
+        expectedOutput: processedRoute.expectedOutput
+      });
+
+      return processedRoute;
     });
 
     console.log('Processed routes:', processedRoutes);
