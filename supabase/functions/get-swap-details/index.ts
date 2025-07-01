@@ -20,7 +20,7 @@ serve(async (req) => {
     const { fromAsset, toAsset, amount, recipient } = validateSwapRequest(body);
     const swapkitApiKey = validateApiKey();
 
-    console.log('Getting swap details for:', { fromAsset, toAsset, amount, recipient });
+    console.log('🚀 Getting swap details for:', { fromAsset, toAsset, amount, recipient });
 
     let quoteData;
     try {
@@ -29,62 +29,83 @@ serve(async (req) => {
         swapkitApiKey
       );
     } catch (error) {
-      console.error('SwapKit API error:', error);
-      // Return a structured error instead of throwing
+      console.error('❌ SwapKit API error:', error);
       return createErrorResponse(`SwapKit API error: ${error.message}`);
     }
 
-    console.log('Quote data received:', quoteData);
+    console.log('📥 Quote data received from SwapKit');
 
-    // 🔍 Debug: Log raw routes data for inspection
-    console.log('🔍 Raw routes data:', JSON.stringify(quoteData.routes || [], null, 2));
-
-    // Also log providers specifically
+    // Enhanced debugging - log raw routes data structure
     if (quoteData.routes && Array.isArray(quoteData.routes)) {
-      console.log('🔍 Raw providers found:', quoteData.routes.map((r: any) => ({
-        provider: r.providers?.[0] || r.provider || r.meta?.provider || 'Unknown',
-        hasDepositAddress: !!(r.targetAddress || r.inboundAddress || r.depositAddress),
-        hasMemo: !!(r.memo || r.transaction?.memo)
-      })));
+      console.log(`🔍 Found ${quoteData.routes.length} raw routes from SwapKit`);
+      
+      quoteData.routes.forEach((route: any, index: number) => {
+        console.log(`\n📋 Raw route ${index + 1} structure:`, {
+          provider: route.providers?.[0] || route.provider || route.meta?.provider || 'Unknown',
+          hasDepositAddress: !!(route.targetAddress || route.inboundAddress || route.depositAddress || route.meta?.chainflip?.depositAddress),
+          hasMemo: !!(route.memo || route.transaction?.memo || route.meta?.memo),
+          expectedOutput: route.expectedBuyAmount || route.expectedOutput || 'N/A'
+        });
+      });
+    } else {
+      console.warn('⚠️ No routes array found in quote data:', quoteData);
     }
 
     // Handle provider errors gracefully
     if (quoteData.providerErrors && Array.isArray(quoteData.providerErrors)) {
-      console.log('⚠️ Provider errors received:', quoteData.providerErrors);
+      console.log('⚠️ Provider errors received:');
       quoteData.providerErrors.forEach((error: any) => {
-        console.log(`⚠️ ${error.provider} error: ${error.message}`);
+        console.log(`  • ${error.provider}: ${error.message}`);
       });
     }
 
-    // Check if we have routes - handle gracefully instead of throwing
+    // Check if we have routes
     if (!quoteData.routes || !Array.isArray(quoteData.routes) || quoteData.routes.length === 0) {
-      console.warn('⚠️ No routes from any provider:', quoteData);
+      console.warn('⚠️ No routes available from any provider');
       return createNoRoutesResponse();
     }
 
-    // Process all available routes for comparison
+    // Process all available routes
+    console.log('🔄 Processing routes...');
     const processedRoutes = processRoutes(quoteData.routes, recipient);
 
-    console.log('Processed routes:', processedRoutes);
+    console.log(`✅ Successfully processed ${processedRoutes.length} routes:`, 
+      processedRoutes.map(r => ({
+        provider: r.provider,
+        hasDepositAddress: !!r.depositAddress,
+        hasMemo: !!r.memo,
+        expectedOutput: r.expectedOutput
+      }))
+    );
 
     if (processedRoutes.length === 0) {
       console.warn('⚠️ No valid routes after processing');
       return createNoRoutesResponse();
     }
 
-    // Return all routes for comparison
+    // Sort routes by expected output (descending) to put best route first
+    const sortedRoutes = processedRoutes.sort((a, b) => {
+      const outputA = parseFloat(a.expectedOutput) || 0;
+      const outputB = parseFloat(b.expectedOutput) || 0;
+      return outputB - outputA;
+    });
+
     const response = {
-      routes: processedRoutes,
+      routes: sortedRoutes,
       expiresIn: 900, // 15 minutes standard TTL
-      bestRoute: processedRoutes[0] || null // First route is usually the best
+      bestRoute: sortedRoutes[0] || null
     };
 
-    console.log('Final response:', response);
+    console.log('🎉 Final response prepared:', {
+      routeCount: response.routes.length,
+      bestProvider: response.bestRoute?.provider || 'None',
+      providers: response.routes.map(r => r.provider)
+    });
 
     return createSuccessResponse(response);
 
   } catch (error) {
-    console.error('Error in get-swap-details:', error);
+    console.error('💥 Error in get-swap-details:', error);
     
     return createErrorResponse(
       `Failed to get swap details: ${error.message}`
