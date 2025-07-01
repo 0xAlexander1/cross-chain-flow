@@ -72,27 +72,49 @@ serve(async (req) => {
     const quoteData = await quoteResponse.json();
     console.log('Quote data received:', quoteData);
 
-    // Check if we have routes
+    // 🔍 Debug: Log raw routes data for inspection
+    console.log('🔍 Raw routes data:', JSON.stringify(quoteData.routes, null, 2));
+
+    // Check if we have routes - handle gracefully instead of throwing
     if (!quoteData.routes || quoteData.routes.length === 0) {
-      throw new Error('No swap routes found');
+      console.warn('⚠️ No routes from any provider:', quoteData);
+      return new Response(
+        JSON.stringify({ 
+          routes: [], 
+          expiresIn: 0, 
+          bestRoute: null,
+          debug: 'No routes found from providers'
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200
+        }
+      );
     }
+
+    // Helper functions to extract data from different route formats
+    const getDepositAddress = (route: any) => {
+      return (
+        route.transaction?.from ||
+        route.transaction?.depositAddress ||
+        route.inboundAddress ||
+        route.targetAddress ||
+        route.depositAddress ||
+        route.meta?.chainflip?.depositAddress ||
+        ''
+      );
+    };
+
+    const getMemo = (route: any, recipient: string) => {
+      let memo = route.transaction?.memo || route.memo || '';
+      if (memo.includes('{destinationAddress}')) {
+        memo = memo.replace('{destinationAddress}', recipient);
+      }
+      return memo;
+    };
 
     // Process all available routes for comparison
     const processedRoutes = quoteData.routes.map((route: any) => {
-      // Process memo correctly - replace placeholder with actual destination address
-      let processedMemo = route.memo || '';
-      if (processedMemo.includes('{destinationAddress}')) {
-        processedMemo = processedMemo.replace('{destinationAddress}', recipient);
-      }
-
-      // Get deposit address - handle different provider formats
-      let depositAddress = route.targetAddress || route.inboundAddress || route.depositAddress;
-      
-      // For Chainflip, sometimes the address is in meta
-      if (!depositAddress && route.meta?.chainflip?.depositAddress) {
-        depositAddress = route.meta.chainflip.depositAddress;
-      }
-
       // Extract time estimation
       let estimatedTime = route.estimatedTime;
       if (typeof estimatedTime === 'object' && estimatedTime !== null) {
@@ -110,8 +132,8 @@ serve(async (req) => {
 
       return {
         provider: route.providers?.[0] || route.provider || 'Unknown',
-        depositAddress,
-        memo: processedMemo,
+        depositAddress: getDepositAddress(route),
+        memo: getMemo(route, recipient),
         expectedOutput: route.expectedBuyAmount || route.expectedOutput || route.expectedOutputUSD,
         expectedOutputMaxSlippage: route.expectedBuyAmountMaxSlippage,
         fees: route.fees || [],
@@ -131,7 +153,7 @@ serve(async (req) => {
     const response = {
       routes: processedRoutes,
       expiresIn: 900, // 15 minutes standard TTL
-      bestRoute: processedRoutes[0] // First route is usually the best
+      bestRoute: processedRoutes[0] || null // First route is usually the best
     };
 
     console.log('Final response:', response);

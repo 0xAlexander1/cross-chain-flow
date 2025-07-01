@@ -93,9 +93,13 @@ const ManualSwap = () => {
           });
         }
       } else {
+        // Handle no routes case - show comparison with empty routes
+        setSwapRoutes({ routes: [], expiresIn: 0, bestRoute: null });
+        setCurrentStep('comparison');
+        
         toast({
           title: "Sin rutas disponibles",
-          description: "No se encontraron proveedores para este intercambio",
+          description: "No se encontraron proveedores para este intercambio. Prueba con otros tokens o cantidades.",
           variant: "destructive"
         });
       }

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Check, Clock, DollarSign, TrendingDown, AlertTriangle, Zap, Waves, RotateCcw } from 'lucide-react';
@@ -110,6 +109,37 @@ const ProviderComparison: React.FC<ProviderComparisonProps> = ({
   };
 
   const bestRouteIndex = getBestRouteIndex();
+
+  // Handle empty routes case
+  if (!routes || routes.length === 0) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="bg-card border border-border rounded-2xl p-6 shadow-lg"
+      >
+        <div className="text-center py-8">
+          <div className="mb-4">
+            <AlertTriangle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
+          </div>
+          <h2 className="text-2xl font-bold text-foreground mb-2">
+            Sin rutas disponibles
+          </h2>
+          <p className="text-muted-foreground mb-6">
+            No se encontraron proveedores para el swap de {amount} {fromAsset?.ticker} → {toAsset?.ticker}
+          </p>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>• Verifica que los tokens sean compatibles</p>
+            <p>• Intenta con una cantidad diferente</p>
+            <p>• Algunos proveedores pueden estar temporalmente no disponibles</p>
+          </div>
+          <Button onClick={onBack} className="mt-6">
+            Volver al formulario
+          </Button>
+        </div>
+      </motion.div>
+    );
+  }
 
   if (selectedRoute) {
     return (
