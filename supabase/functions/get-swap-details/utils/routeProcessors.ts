@@ -5,15 +5,17 @@ export const getDepositAddress = (route: any) => {
     hasMeta: !!route.meta,
     hasInboundAddress: !!route.inboundAddress,
     hasTargetAddress: !!route.targetAddress,
-    hasDepositAddress: !!route.depositAddress
+    hasDepositAddress: !!route.depositAddress,
+    routeKeys: Object.keys(route)
   });
   
-  // Try multiple possible locations for deposit address with comprehensive coverage
+  // Enhanced deposit address extraction with more comprehensive fallbacks
   const depositAddress = (
     // Transaction level fields (most common)
     route.transaction?.from ||
     route.transaction?.depositAddress ||
     route.transaction?.to ||
+    route.transaction?.inboundAddress ||
     
     // Direct route fields
     route.inboundAddress ||
@@ -21,34 +23,67 @@ export const getDepositAddress = (route: any) => {
     route.depositAddress ||
     route.vault ||
     route.router ||
+    route.poolAddress ||
+    route.address ||
     
-    // Provider-specific nested fields
+    // Provider-specific nested fields - ChainFlip
     route.meta?.chainflip?.depositAddress ||
     route.meta?.chainflip?.inboundAddress ||
+    route.meta?.chainflip?.poolAddress ||
+    route.meta?.chainflip?.vaultAddress ||
+    
+    // Provider-specific nested fields - MayaChain
     route.meta?.mayachain?.inboundAddress ||
     route.meta?.mayachain?.depositAddress ||
+    route.meta?.mayachain?.poolAddress ||
+    route.meta?.mayachain?.vaultAddress ||
+    
+    // Provider-specific nested fields - THORChain
     route.meta?.thorchain?.inboundAddress ||
     route.meta?.thorchain?.depositAddress ||
+    route.meta?.thorchain?.poolAddress ||
+    route.meta?.thorchain?.vaultAddress ||
+    
+    // Generic meta fields
     route.meta?.depositAddress ||
     route.meta?.inboundAddress ||
+    route.meta?.address ||
+    route.meta?.poolAddress ||
     
     // Swap/execution specific fields
     route.swap?.depositAddress ||
     route.swap?.inboundAddress ||
     route.swap?.targetAddress ||
+    route.swap?.address ||
     
     // Steps/legs arrays for multi-step swaps
     route.steps?.[0]?.depositAddress ||
     route.steps?.[0]?.inboundAddress ||
     route.steps?.[0]?.targetAddress ||
+    route.steps?.[0]?.address ||
     route.legs?.[0]?.depositAddress ||
     route.legs?.[0]?.inboundAddress ||
     route.legs?.[0]?.targetAddress ||
+    route.legs?.[0]?.address ||
     
     // Alternative nested structures
     route.quote?.depositAddress ||
+    route.quote?.inboundAddress ||
+    route.quote?.address ||
     route.route?.depositAddress ||
+    route.route?.inboundAddress ||
+    route.route?.address ||
     route.path?.[0]?.depositAddress ||
+    route.path?.[0]?.inboundAddress ||
+    route.path?.[0]?.address ||
+    
+    // Additional fallbacks for new API formats
+    route.calldata?.target ||
+    route.calldata?.to ||
+    route.txData?.to ||
+    route.txData?.target ||
+    route.contract?.address ||
+    route.pool?.address ||
     
     ''
   );
@@ -56,7 +91,8 @@ export const getDepositAddress = (route: any) => {
   console.log('✅ Extracted deposit address:', {
     address: depositAddress,
     length: depositAddress?.length || 0,
-    source: depositAddress ? 'found' : 'not found'
+    source: depositAddress ? 'found' : 'not found',
+    preview: depositAddress ? `${depositAddress.slice(0, 10)}...${depositAddress.slice(-6)}` : 'N/A'
   });
   
   return depositAddress;
@@ -67,36 +103,60 @@ export const getMemo = (route: any, recipient: string) => {
     hasTransaction: !!route.transaction,
     hasMeta: !!route.meta,
     directMemo: !!route.memo,
-    provider: route.providers?.[0] || route.provider || 'unknown'
+    provider: route.providers?.[0] || route.provider || 'unknown',
+    routeKeys: Object.keys(route)
   });
   
-  // Extract memo from multiple possible locations
+  // Extract memo from multiple possible locations with enhanced fallbacks
   let memo = (
     // Transaction level memo (most reliable)
     route.transaction?.memo ||
     route.transaction?.data ||
+    route.transaction?.calldata ||
     
     // Direct memo field
     route.memo ||
+    route.data ||
     
-    // Provider-specific memo locations
-    route.meta?.memo ||
-    route.meta?.mayachain?.memo ||
-    route.meta?.thorchain?.memo ||
+    // Provider-specific memo locations - ChainFlip
     route.meta?.chainflip?.memo ||
     route.meta?.chainflip?.tag ||
+    route.meta?.chainflip?.data ||
+    route.meta?.chainflip?.calldata ||
+    
+    // Provider-specific memo locations - MayaChain
+    route.meta?.mayachain?.memo ||
+    route.meta?.mayachain?.tag ||
+    route.meta?.mayachain?.data ||
+    
+    // Provider-specific memo locations - THORChain
+    route.meta?.thorchain?.memo ||
+    route.meta?.thorchain?.tag ||
+    route.meta?.thorchain?.data ||
+    
+    // Generic meta memo
+    route.meta?.memo ||
+    route.meta?.tag ||
+    route.meta?.data ||
+    route.meta?.calldata ||
     
     // Alternative memo locations
     route.swap?.memo ||
+    route.swap?.data ||
     route.steps?.[0]?.memo ||
+    route.steps?.[0]?.data ||
     route.legs?.[0]?.memo ||
+    route.legs?.[0]?.data ||
     route.quote?.memo ||
+    route.quote?.data ||
     route.route?.memo ||
+    route.route?.data ||
     
     // Tag variations (especially for ChainFlip)
     route.tag ||
-    route.meta?.tag ||
-    route.transaction?.tag ||
+    route.calldata ||
+    route.txData?.data ||
+    route.txData?.input ||
     
     ''
   );
@@ -110,7 +170,9 @@ export const getMemo = (route: any, recipient: string) => {
       .replace(/\{recipient\}/g, recipient)
       .replace(/\{destination\}/g, recipient)
       .replace(/\{address\}/g, recipient)
-      .replace(/\{to\}/g, recipient);
+      .replace(/\{to\}/g, recipient)
+      .replace(/\{target\}/g, recipient)
+      .replace(/\{output\}/g, recipient);
       
     if (originalMemo !== memo) {
       console.log('📝 Processed memo placeholders:', {
@@ -123,7 +185,8 @@ export const getMemo = (route: any, recipient: string) => {
   console.log('✅ Extracted memo result:', {
     memo: memo,
     length: memo?.length || 0,
-    hasContent: !!memo
+    hasContent: !!memo,
+    preview: memo ? memo.slice(0, 50) + (memo.length > 50 ? '...' : '') : 'N/A'
   });
   
   return memo;
@@ -134,48 +197,60 @@ export const getProviderName = (route: any) => {
     providers: route.providers,
     provider: route.provider,
     metaProvider: route.meta?.provider,
-    protocol: route.protocol
+    protocol: route.protocol,
+    routeKeys: Object.keys(route)
   });
   
-  // Check multiple possible locations for provider name
+  // Check multiple possible locations for provider name with enhanced detection
   const rawProvider = (
     route.providers?.[0] || 
     route.provider || 
     route.meta?.provider || 
     route.protocol ||
+    route.dex ||
+    route.exchange ||
+    route.bridge ||
     route.legs?.[0]?.provider ||
     route.steps?.[0]?.provider ||
     route.source ||
-    route.dex
+    route.platform ||
+    route.name ||
+    route.type
   );
   
-  // Comprehensive provider name normalization
+  // Enhanced provider name normalization with better detection
   if (typeof rawProvider === 'string') {
     const upperProvider = rawProvider.toUpperCase();
     
-    // MayaChain variations (include CACAO token references)
+    // MayaChain variations (include all possible names)
     if (upperProvider.includes('MAYA') || 
         upperProvider.includes('CACAO') || 
         upperProvider === 'MAYA' ||
-        upperProvider.includes('MAYAPROTOCOL')) {
+        upperProvider.includes('MAYAPROTOCOL') ||
+        upperProvider.includes('MAYA_CHAIN') ||
+        upperProvider.includes('MAYACHAIN')) {
       console.log('✅ Identified as MAYACHAIN');
       return 'MAYACHAIN';
     }
     
-    // THORChain variations (include RUNE token references)
+    // THORChain variations (include all possible names)
     if (upperProvider.includes('THOR') || 
         upperProvider.includes('RUNE') || 
         upperProvider === 'THOR' ||
-        upperProvider.includes('THORSWAP')) {
+        upperProvider.includes('THORSWAP') ||
+        upperProvider.includes('THOR_CHAIN') ||
+        upperProvider.includes('THORCHAIN')) {
       console.log('✅ Identified as THORCHAIN');
       return 'THORCHAIN';
     }
     
-    // ChainFlip variations (include FLIP token references)
+    // ChainFlip variations (include all possible names)
     if (upperProvider.includes('CHAINFLIP') || 
         upperProvider.includes('FLIP') || 
         upperProvider === 'CHAINFLIP' ||
-        upperProvider.includes('CHAIN_FLIP')) {
+        upperProvider.includes('CHAIN_FLIP') ||
+        upperProvider.includes('CF') ||
+        upperProvider.includes('CHAINFLIP_DEX')) {
       console.log('✅ Identified as CHAINFLIP');
       return 'CHAINFLIP';
     }
@@ -184,9 +259,18 @@ export const getProviderName = (route: any) => {
     return upperProvider;
   }
   
-  // Handle object-type provider data
+  // Handle object-type provider data with enhanced extraction
   if (typeof rawProvider === 'object' && rawProvider !== null) {
-    const providerName = rawProvider.name || rawProvider.protocol || rawProvider.type || rawProvider.provider;
+    const providerName = (
+      rawProvider.name || 
+      rawProvider.protocol || 
+      rawProvider.type || 
+      rawProvider.provider ||
+      rawProvider.platform ||
+      rawProvider.exchange ||
+      rawProvider.dex
+    );
+    
     if (providerName && typeof providerName === 'string') {
       const upperName = providerName.toUpperCase();
       if (upperName.includes('MAYA')) return 'MAYACHAIN';
@@ -229,9 +313,9 @@ export const calculateTotalFees = (fees: any[]): number => {
   }
   
   const total = fees.reduce((sum: number, fee: any) => {
-    const feeAmount = parseFloat(fee.amount || fee.value || '0');
+    const feeAmount = parseFloat(fee.amount || fee.value || fee.fee || '0');
     if (!isNaN(feeAmount)) {
-      console.log(`📊 Adding fee: ${feeAmount} ${fee.asset || fee.token || 'unknown'}`);
+      console.log(`📊 Adding fee: ${feeAmount} ${fee.asset || fee.token || fee.currency || 'unknown'}`);
       return sum + feeAmount;
     }
     return sum;

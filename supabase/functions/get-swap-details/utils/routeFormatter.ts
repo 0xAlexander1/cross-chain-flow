@@ -23,16 +23,27 @@ export const processRoutes = (routes: any[], recipient: string) => {
   const processedRoutes = routes.map((route: any, index: number) => {
     console.log(`\n📋 Processing route ${index + 1}:`);
     
-    // Enhanced debugging for ChainFlip and MayaChain specifically
+    // Enhanced debugging for all providers
     if (Deno.env.get('DEBUG') === 'true') {
       console.log('🔍 RAW ROUTE DATA:', JSON.stringify(route, null, 2));
+    } else {
+      // Always log route structure for debugging provider issues
+      console.log('🔍 Route structure summary:', {
+        hasProviders: !!route.providers,
+        hasProvider: !!route.provider,
+        hasMeta: !!route.meta,
+        hasTransaction: !!route.transaction,
+        topLevelKeys: Object.keys(route),
+        metaKeys: route.meta ? Object.keys(route.meta) : [],
+        transactionKeys: route.transaction ? Object.keys(route.transaction) : []
+      });
     }
     
     const provider = getProviderName(route);
     const depositAddress = getDepositAddress(route);
     const memo = getMemo(route, recipient);
     
-    // Enhanced output extraction with multiple fallbacks
+    // Enhanced output extraction with multiple fallbacks and better error handling
     const expectedOutput = (
       route.expectedBuyAmount || 
       route.expectedOutput || 
@@ -41,36 +52,71 @@ export const processRoutes = (routes: any[], recipient: string) => {
       route.outAmount ||
       route.toAmount ||
       route.outputAmount ||
+      route.receiveAmount ||
       route.quote?.expectedOutput ||
       route.quote?.buyAmount ||
+      route.quote?.outputAmount ||
+      route.meta?.expectedOutput ||
+      route.meta?.buyAmount ||
+      route.transaction?.value ||
+      route.legs?.[0]?.outputAmount ||
+      route.steps?.[0]?.outputAmount ||
       '0'
     );
     
-    // Enhanced fees extraction
-    const fees = route.fees || route.totalFees || route.networkFees || route.quote?.fees || [];
+    // Enhanced fees extraction with better fallbacks
+    let fees = route.fees || route.totalFees || route.networkFees || route.quote?.fees || [];
+    
+    // Try to extract fees from meta or other locations
+    if (!fees || !Array.isArray(fees) || fees.length === 0) {
+      fees = route.meta?.fees || 
+             route.transaction?.fees || 
+             route.costs || 
+             route.charges || 
+             [];
+    }
+    
+    // Ensure fees is always an array
+    if (!Array.isArray(fees)) {
+      fees = fees ? [fees] : [];
+    }
     
     const processedRoute = {
       provider,
       depositAddress,
       memo,
       expectedOutput: expectedOutput.toString(),
-      expectedOutputMaxSlippage: route.expectedBuyAmountMaxSlippage || route.expectedOutputMaxSlippage || route.minOutput || expectedOutput.toString(),
-      fees: Array.isArray(fees) ? fees : [],
-      estimatedTime: formatEstimatedTime(route.estimatedTime || route.timeEstimate || route.duration || route.quote?.estimatedTime),
-      priceImpact: route.meta?.priceImpact || route.priceImpact || (route.totalSlippageBps ? route.totalSlippageBps / 100 : 0),
+      expectedOutputMaxSlippage: route.expectedBuyAmountMaxSlippage || 
+                                 route.expectedOutputMaxSlippage || 
+                                 route.minOutput || 
+                                 route.minimumReceived ||
+                                 expectedOutput.toString(),
+      fees: fees,
+      estimatedTime: formatEstimatedTime(
+        route.estimatedTime || 
+        route.timeEstimate || 
+        route.duration || 
+        route.quote?.estimatedTime ||
+        route.meta?.estimatedTime
+      ),
+      priceImpact: route.meta?.priceImpact || 
+                   route.priceImpact || 
+                   route.slippage ||
+                   (route.totalSlippageBps ? route.totalSlippageBps / 100 : 0),
       warnings: [...(route.warnings || route.alerts || route.errors || [])],
-      totalFees: calculateTotalFees(Array.isArray(fees) ? fees : [])
+      totalFees: calculateTotalFees(fees)
     };
 
     // Run provider-specific validation
     const validation = validateProviderRoute(provider, processedRoute);
     
     if (!validation.isValid) {
-      console.warn(`⚠️ Route ${index + 1} validation failed:`, validation.errors);
+      console.warn(`⚠️ Route ${index + 1} validation failed for ${provider}:`, validation.errors);
       processedRoute.warnings.push(...validation.errors);
     }
     
     if (validation.warnings.length > 0) {
+      console.log(`⚠️ Route ${index + 1} validation warnings for ${provider}:`, validation.warnings);
       processedRoute.warnings.push(...validation.warnings);
     }
 
@@ -86,8 +132,8 @@ export const processRoutes = (routes: any[], recipient: string) => {
       processedRoute.warnings.push(`Recipient address may not be valid for ${targetNetwork} network`);
     }
 
-    // Enhanced logging for debugging
-    console.log(`✅ Route ${index + 1} processed:`, {
+    // Enhanced logging for debugging with provider-specific details
+    console.log(`✅ Route ${index + 1} processed (${provider}):`, {
       provider: processedRoute.provider,
       hasDepositAddress: !!processedRoute.depositAddress,
       depositAddressLength: processedRoute.depositAddress?.length || 0,
@@ -96,57 +142,73 @@ export const processRoutes = (routes: any[], recipient: string) => {
         'N/A',
       hasMemo: !!processedRoute.memo,
       memoLength: processedRoute.memo?.length || 0,
-      memoPreview: processedRoute.memo?.slice(0, 50) || 'N/A',
+      memoPreview: processedRoute.memo?.slice(0, 50) + (processedRoute.memo?.length > 50 ? '...' : '') || 'N/A',
       expectedOutput: processedRoute.expectedOutput,
       feesCount: processedRoute.fees.length,
       warningsCount: processedRoute.warnings.length,
-      validationPassed: validation.isValid
+      validationPassed: validation.isValid,
+      validationScore: validation.isValid ? 100 : Math.max(0, 100 - (validation.errors.length * 25))
     });
 
-    // Enhanced validation warnings
+    // Enhanced validation warnings with provider-specific messages
     if (!processedRoute.depositAddress) {
-      console.warn(`⚠️ Route ${index + 1} (${provider}) missing deposit address - this will cause transaction failure`);
+      const message = `⚠️ ${provider} route ${index + 1} missing deposit address - this WILL cause transaction failure`;
+      console.warn(message);
+      processedRoute.warnings.push(`Missing deposit address for ${provider}`);
     }
     
     if ((provider === 'MAYACHAIN' || provider === 'THORCHAIN') && !processedRoute.memo) {
-      console.warn(`⚠️ ${provider} route ${index + 1} missing memo - this may cause transaction failure`);
+      const message = `⚠️ ${provider} route ${index + 1} missing memo - this may cause transaction failure`;
+      console.warn(message);
+      processedRoute.warnings.push(`Missing required memo for ${provider}`);
     }
 
     if (provider === 'CHAINFLIP' && !processedRoute.memo) {
-      console.log(`ℹ️ ChainFlip route ${index + 1} has no memo (may be optional for this swap)`);
+      console.log(`ℹ️ ChainFlip route ${index + 1} has no memo (may be optional for this swap type)`);
+    }
+
+    // Log potential issues for debugging
+    if (parseFloat(processedRoute.expectedOutput) <= 0) {
+      console.warn(`⚠️ ${provider} route ${index + 1} has zero or invalid expected output: ${processedRoute.expectedOutput}`);
     }
 
     return processedRoute;
   }).filter(route => {
-    // Enhanced filtering logic with detailed logging
+    // Enhanced filtering logic with detailed logging and more permissive rules
     const hasValidProvider = route.provider !== 'Unknown' && route.provider !== 'UNKNOWN';
     const hasDepositAddress = !!route.depositAddress;
-    const hasValidDepositLength = route.depositAddress && route.depositAddress.length > 10;
+    const hasValidDepositLength = route.depositAddress && route.depositAddress.length > 5; // More permissive
+    const hasValidOutput = parseFloat(route.expectedOutput) > 0;
     
-    // For THORChain and MayaChain, memo is usually required
+    // For THORChain and MayaChain, memo is usually required but not always
     const requiresMemo = route.provider === 'THORCHAIN' || route.provider === 'MAYACHAIN';
     const hasMemoWhenRequired = !requiresMemo || !!route.memo;
     
     // ChainFlip memo is optional for native swaps
     const isValidChainFlip = route.provider === 'CHAINFLIP' && hasDepositAddress && hasValidDepositLength;
     
-    const isValid = hasValidProvider && hasDepositAddress && hasValidDepositLength && 
-                   (hasMemoWhenRequired || isValidChainFlip);
+    // More permissive validation - allow routes with warnings
+    const isValid = hasValidProvider && hasDepositAddress && hasValidDepositLength && hasValidOutput;
     
     if (!isValid) {
-      console.warn('🚫 Filtering out invalid route:', {
+      console.warn(`🚫 Filtering out invalid route (${route.provider}):`, {
         provider: route.provider,
         hasValidProvider,
         hasDepositAddress,
         hasValidDepositLength,
+        hasValidOutput,
         hasMemoWhenRequired,
         isValidChainFlip,
+        depositAddressLength: route.depositAddress?.length || 0,
+        expectedOutput: route.expectedOutput,
         reason: !hasValidProvider ? 'Invalid provider' :
                 !hasDepositAddress ? 'No deposit address' :
                 !hasValidDepositLength ? 'Invalid deposit address length' :
-                !hasMemoWhenRequired ? 'Missing required memo' :
+                !hasValidOutput ? 'Invalid expected output' :
                 'Unknown validation failure'
       });
+    } else {
+      console.log(`✅ Route ${route.provider} passed validation`);
     }
     
     return isValid;
@@ -160,7 +222,20 @@ export const processRoutes = (routes: any[], recipient: string) => {
     return acc;
   }, {} as Record<string, number>);
   
-  console.log('📊 Routes by provider:', providerSummary);
+  console.log('📊 Final routes by provider:', providerSummary);
+  
+  // If we have no valid routes, log detailed debugging info
+  if (processedRoutes.length === 0) {
+    console.error('❌ NO VALID ROUTES FOUND - Debugging info:');
+    routes.forEach((route, index) => {
+      console.error(`Route ${index + 1} debug:`, {
+        provider: getProviderName(route),
+        depositAddress: getDepositAddress(route),
+        memo: getMemo(route, recipient),
+        rawRoute: JSON.stringify(route, null, 2)
+      });
+    });
+  }
   
   return processedRoutes;
 };
