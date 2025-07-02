@@ -66,32 +66,13 @@ const ManualSwap = () => {
       if (details && details.routes && details.routes.length > 0) {
         setSwapRoutes(details);
         
-        // If multiple routes, show comparison, otherwise go directly to confirmation
-        if (details.routes.length > 1) {
-          setCurrentStep('comparison');
-          toast({
-            title: "Múltiples proveedores disponibles",
-            description: `Encontramos ${details.routes.length} opciones para tu swap`,
-          });
-        } else {
-          // Single route, show details
-          const fromAsset = assets.find(asset => asset.identifier === fromToken);
-          const toAsset = assets.find(asset => asset.identifier === toToken);
-          
-          setSelectedRoute({
-            ...details.routes[0],
-            fromAsset,
-            toAsset,
-            exactAmount: amount,
-            recipient
-          });
-          setCurrentStep('confirmation');
-          
-          toast({
-            title: "Estimación obtenida",
-            description: `Recibirás aproximadamente ${details.routes[0].expectedOutput} ${toAsset?.ticker}`,
-          });
-        }
+        // Always show comparison page when routes are available
+        setCurrentStep('comparison');
+        
+        toast({
+          title: "Rutas disponibles",
+          description: `Encontramos ${details.routes.length} opciones para tu swap`,
+        });
       } else {
         // Handle no routes case - show comparison with empty routes
         setSwapRoutes({ routes: [], expiresIn: 0, bestRoute: null });
