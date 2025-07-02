@@ -35,20 +35,30 @@ serve(async (req) => {
 
     console.log('📥 Quote data received from SwapKit');
 
-    // Enhanced debugging - log raw routes data structure
+    // Enhanced debugging for development
+    if (Deno.env.get('DEBUG') === 'true') {
+      console.log('🔍 FULL QUOTE DATA DUMP:', JSON.stringify(quoteData, null, 2));
+    }
+
+    // Enhanced routes validation and logging
     if (quoteData.routes && Array.isArray(quoteData.routes)) {
       console.log(`🔍 Found ${quoteData.routes.length} raw routes from SwapKit`);
       
+      // Log each route structure for debugging ChainFlip and MayaChain issues
       quoteData.routes.forEach((route: any, index: number) => {
-        console.log(`\n📋 Raw route ${index + 1} structure:`, {
-          provider: route.providers?.[0] || route.provider || route.meta?.provider || 'Unknown',
-          hasDepositAddress: !!(route.targetAddress || route.inboundAddress || route.depositAddress || route.meta?.chainflip?.depositAddress),
-          hasMemo: !!(route.memo || route.transaction?.memo || route.meta?.memo),
-          expectedOutput: route.expectedBuyAmount || route.expectedOutput || 'N/A'
+        const provider = route.providers?.[0] || route.provider || route.meta?.provider || 'Unknown';
+        console.log(`\n📋 Raw route ${index + 1} (${provider}) summary:`, {
+          provider: provider,
+          hasTransaction: !!route.transaction,
+          hasDepositAddress: !!(route.targetAddress || route.inboundAddress || route.depositAddress || route.transaction?.from || route.meta?.chainflip?.depositAddress),
+          hasMemo: !!(route.memo || route.transaction?.memo || route.meta?.memo || route.meta?.mayachain?.memo),
+          hasExpectedOutput: !!(route.expectedBuyAmount || route.expectedOutput),
+          metaKeys: route.meta ? Object.keys(route.meta) : [],
+          transactionKeys: route.transaction ? Object.keys(route.transaction) : []
         });
       });
     } else {
-      console.warn('⚠️ No routes array found in quote data:', quoteData);
+      console.warn('⚠️ No routes array found in quote data');
     }
 
     // Handle provider errors gracefully
@@ -59,27 +69,29 @@ serve(async (req) => {
       });
     }
 
-    // Check if we have routes
+    // Check if we have routes to process
     if (!quoteData.routes || !Array.isArray(quoteData.routes) || quoteData.routes.length === 0) {
       console.warn('⚠️ No routes available from any provider');
       return createNoRoutesResponse();
     }
 
-    // Process all available routes
-    console.log('🔄 Processing routes...');
+    // Process all available routes with enhanced error handling
+    console.log('🔄 Processing routes with enhanced validation...');
     const processedRoutes = processRoutes(quoteData.routes, recipient);
 
     console.log(`✅ Successfully processed ${processedRoutes.length} routes:`, 
       processedRoutes.map(r => ({
         provider: r.provider,
         hasDepositAddress: !!r.depositAddress,
+        depositAddressLength: r.depositAddress?.length || 0,
         hasMemo: !!r.memo,
+        memoLength: r.memo?.length || 0,
         expectedOutput: r.expectedOutput
       }))
     );
 
     if (processedRoutes.length === 0) {
-      console.warn('⚠️ No valid routes after processing');
+      console.warn('⚠️ No valid routes after processing and validation');
       return createNoRoutesResponse();
     }
 
@@ -92,14 +104,16 @@ serve(async (req) => {
 
     const response = {
       routes: sortedRoutes,
-      expiresIn: 900, // 15 minutes standard TTL
+      expiresIn: quoteData.ttl || 900, // Use API provided TTL or default to 15 minutes
       bestRoute: sortedRoutes[0] || null
     };
 
     console.log('🎉 Final response prepared:', {
       routeCount: response.routes.length,
       bestProvider: response.bestRoute?.provider || 'None',
-      providers: response.routes.map(r => r.provider)
+      providers: response.routes.map(r => r.provider),
+      hasDepositAddresses: response.routes.every(r => !!r.depositAddress),
+      hasMemos: response.routes.filter(r => !!r.memo).length
     });
 
     return createSuccessResponse(response);

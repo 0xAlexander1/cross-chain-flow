@@ -36,32 +36,53 @@ export const fetchSwapQuote = async (request: SwapRequest, apiKey: string) => {
     const errorText = await response.text();
     console.error('❌ SwapKit quote error:', errorText);
     
-    // Try to parse error response to see if we have partial data
+    // Enhanced error parsing to handle partial responses
     try {
       const errorData = JSON.parse(errorText);
-      console.log('🔍 Parsed error response:', errorData);
+      console.log('🔍 Parsed error response structure:', errorData);
       
-      // If we have routes despite errors, continue
+      // If we have routes despite errors, continue with available data
       if (errorData.routes && Array.isArray(errorData.routes) && errorData.routes.length > 0) {
-        console.log('⚠️ API returned errors but has routes:', errorData.routes.length);
+        console.log('⚠️ API returned errors but has usable routes:', errorData.routes.length);
         return errorData;
       }
       
-      // If we have provider errors but some succeeded, continue
+      // If we have provider errors but some providers succeeded, continue
       if (errorData.providerErrors && Array.isArray(errorData.providerErrors)) {
-        console.log('⚠️ Provider errors detected:', errorData.providerErrors);
-        // Still return the data as some providers might have succeeded
-        return errorData;
+        console.log('⚠️ Provider-specific errors detected:');
+        errorData.providerErrors.forEach((err: any) => {
+          console.log(`  • ${err.provider || 'Unknown'}: ${err.message || err.error}`);
+        });
+        
+        // Check if there's any successful data alongside errors
+        if (errorData.routes || errorData.data) {
+          console.log('✅ Found partial success data alongside errors');
+          return errorData;
+        }
+      }
+      
+      // If we have any data structure that might contain routes, try to extract it
+      if (errorData.data || errorData.result) {
+        console.log('🔍 Checking nested data structures for routes');
+        const nestedData = errorData.data || errorData.result;
+        if (nestedData.routes && Array.isArray(nestedData.routes)) {
+          return nestedData;
+        }
       }
     } catch (parseError) {
-      console.error('❌ Failed to parse error response:', parseError);
+      console.error('❌ Failed to parse error response as JSON:', parseError);
     }
     
     throw new Error(`SwapKit quote API error: ${response.status} - ${errorText}`);
   }
 
   const data = await response.json();
-  console.log('✅ SwapKit API response received:', JSON.stringify(data, null, 2));
+  console.log('✅ SwapKit API response received successfully');
+  
+  // Debug log for development
+  if (Deno.env.get('DEBUG') === 'true') {
+    console.log('🔍 FULL API RESPONSE:', JSON.stringify(data, null, 2));
+  }
   
   return data;
 };
