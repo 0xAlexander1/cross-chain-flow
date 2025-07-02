@@ -6,6 +6,11 @@ import {
   formatEstimatedTime, 
   calculateTotalFees 
 } from './routeProcessors.ts';
+import { 
+  validateProviderRoute, 
+  getProviderSpecificWarnings,
+  validateNetworkAddress 
+} from './providerValidators.ts';
 
 export const processRoutes = (routes: any[], recipient: string) => {
   if (!routes || !Array.isArray(routes)) {
@@ -53,9 +58,33 @@ export const processRoutes = (routes: any[], recipient: string) => {
       fees: Array.isArray(fees) ? fees : [],
       estimatedTime: formatEstimatedTime(route.estimatedTime || route.timeEstimate || route.duration || route.quote?.estimatedTime),
       priceImpact: route.meta?.priceImpact || route.priceImpact || (route.totalSlippageBps ? route.totalSlippageBps / 100 : 0),
-      warnings: route.warnings || route.alerts || route.errors || [],
+      warnings: [...(route.warnings || route.alerts || route.errors || [])],
       totalFees: calculateTotalFees(Array.isArray(fees) ? fees : [])
     };
+
+    // Run provider-specific validation
+    const validation = validateProviderRoute(provider, processedRoute);
+    
+    if (!validation.isValid) {
+      console.warn(`⚠️ Route ${index + 1} validation failed:`, validation.errors);
+      processedRoute.warnings.push(...validation.errors);
+    }
+    
+    if (validation.warnings.length > 0) {
+      processedRoute.warnings.push(...validation.warnings);
+    }
+
+    // Add provider-specific warnings
+    const fromAsset = route.sellAsset || route.fromAsset || '';
+    const toAsset = route.buyAsset || route.toAsset || '';
+    const specificWarnings = getProviderSpecificWarnings(provider, fromAsset, toAsset);
+    processedRoute.warnings.push(...specificWarnings);
+
+    // Validate recipient address for the target network
+    const targetNetwork = toAsset.split('.')[0];
+    if (targetNetwork && !validateNetworkAddress(recipient, targetNetwork)) {
+      processedRoute.warnings.push(`Recipient address may not be valid for ${targetNetwork} network`);
+    }
 
     // Enhanced logging for debugging
     console.log(`✅ Route ${index + 1} processed:`, {
@@ -69,7 +98,9 @@ export const processRoutes = (routes: any[], recipient: string) => {
       memoLength: processedRoute.memo?.length || 0,
       memoPreview: processedRoute.memo?.slice(0, 50) || 'N/A',
       expectedOutput: processedRoute.expectedOutput,
-      feesCount: processedRoute.fees.length
+      feesCount: processedRoute.fees.length,
+      warningsCount: processedRoute.warnings.length,
+      validationPassed: validation.isValid
     });
 
     // Enhanced validation warnings
@@ -87,17 +118,34 @@ export const processRoutes = (routes: any[], recipient: string) => {
 
     return processedRoute;
   }).filter(route => {
-    // Enhanced filtering logic
-    const isValid = route.provider !== 'Unknown' && route.depositAddress && route.depositAddress.length > 10;
+    // Enhanced filtering logic with detailed logging
+    const hasValidProvider = route.provider !== 'Unknown' && route.provider !== 'UNKNOWN';
+    const hasDepositAddress = !!route.depositAddress;
+    const hasValidDepositLength = route.depositAddress && route.depositAddress.length > 10;
+    
+    // For THORChain and MayaChain, memo is usually required
+    const requiresMemo = route.provider === 'THORCHAIN' || route.provider === 'MAYACHAIN';
+    const hasMemoWhenRequired = !requiresMemo || !!route.memo;
+    
+    // ChainFlip memo is optional for native swaps
+    const isValidChainFlip = route.provider === 'CHAINFLIP' && hasDepositAddress && hasValidDepositLength;
+    
+    const isValid = hasValidProvider && hasDepositAddress && hasValidDepositLength && 
+                   (hasMemoWhenRequired || isValidChainFlip);
     
     if (!isValid) {
       console.warn('🚫 Filtering out invalid route:', {
         provider: route.provider,
-        hasDepositAddress: !!route.depositAddress,
-        depositAddressLength: route.depositAddress?.length || 0,
-        reason: !route.depositAddress ? 'No deposit address' : 
-                route.depositAddress.length <= 10 ? 'Invalid deposit address length' : 
-                'Unknown provider'
+        hasValidProvider,
+        hasDepositAddress,
+        hasValidDepositLength,
+        hasMemoWhenRequired,
+        isValidChainFlip,
+        reason: !hasValidProvider ? 'Invalid provider' :
+                !hasDepositAddress ? 'No deposit address' :
+                !hasValidDepositLength ? 'Invalid deposit address length' :
+                !hasMemoWhenRequired ? 'Missing required memo' :
+                'Unknown validation failure'
       });
     }
     
@@ -105,6 +153,14 @@ export const processRoutes = (routes: any[], recipient: string) => {
   });
 
   console.log(`✅ Successfully processed ${processedRoutes.length} valid routes out of ${routes.length} total`);
+  
+  // Log summary by provider
+  const providerSummary = processedRoutes.reduce((acc, route) => {
+    acc[route.provider] = (acc[route.provider] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  
+  console.log('📊 Routes by provider:', providerSummary);
   
   return processedRoutes;
 };

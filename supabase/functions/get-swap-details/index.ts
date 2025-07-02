@@ -4,6 +4,7 @@ import { corsHeaders, createErrorResponse, createSuccessResponse, createNoRoutes
 import { validateSwapRequest, validateApiKey } from './utils/validation.ts';
 import { fetchSwapQuote } from './utils/swapkitApi.ts';
 import { processRoutes } from './utils/routeFormatter.ts';
+import { runIntegrationTests, validateProviderIntegration } from './utils/integrationTests.ts';
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -17,6 +18,17 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
+    
+    // Special endpoint for running integration tests
+    if (body.action === 'test-integrations') {
+      const swapkitApiKey = validateApiKey();
+      const testReport = await runIntegrationTests(swapkitApiKey);
+      return createSuccessResponse({
+        action: 'integration-test',
+        report: testReport
+      });
+    }
+
     const { fromAsset, toAsset, amount, recipient } = validateSwapRequest(body);
     const swapkitApiKey = validateApiKey();
 
@@ -86,7 +98,8 @@ serve(async (req) => {
         depositAddressLength: r.depositAddress?.length || 0,
         hasMemo: !!r.memo,
         memoLength: r.memo?.length || 0,
-        expectedOutput: r.expectedOutput
+        expectedOutput: r.expectedOutput,
+        warningsCount: r.warnings?.length || 0
       }))
     );
 
@@ -94,6 +107,10 @@ serve(async (req) => {
       console.warn('⚠️ No valid routes after processing and validation');
       return createNoRoutesResponse();
     }
+
+    // Validate provider integrations
+    const integrationStatus = validateProviderIntegration(processedRoutes);
+    console.log('🔧 Provider integration status:', integrationStatus);
 
     // Sort routes by expected output (descending) to put best route first
     const sortedRoutes = processedRoutes.sort((a, b) => {
@@ -105,7 +122,8 @@ serve(async (req) => {
     const response = {
       routes: sortedRoutes,
       expiresIn: quoteData.ttl || 900, // Use API provided TTL or default to 15 minutes
-      bestRoute: sortedRoutes[0] || null
+      bestRoute: sortedRoutes[0] || null,
+      integrationStatus: integrationStatus // Include integration status in response
     };
 
     console.log('🎉 Final response prepared:', {
@@ -113,7 +131,12 @@ serve(async (req) => {
       bestProvider: response.bestRoute?.provider || 'None',
       providers: response.routes.map(r => r.provider),
       hasDepositAddresses: response.routes.every(r => !!r.depositAddress),
-      hasMemos: response.routes.filter(r => !!r.memo).length
+      hasMemos: response.routes.filter(r => !!r.memo).length,
+      integrationHealth: {
+        thorchain: integrationStatus.thorchain.functional,
+        mayachain: integrationStatus.mayachain.functional,
+        chainflip: integrationStatus.chainflip.functional
+      }
     });
 
     return createSuccessResponse(response);

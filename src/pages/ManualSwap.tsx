@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useSwapAssets } from '../hooks/useSwapAssets';
 import { validateSwapInputs } from '../utils/addressValidation';
+import ProviderHealthCheck from '../components/ProviderHealthCheck';
 
 const ManualSwap = () => {
   const { getSwapDetails, getSwapStatus } = useSwapKit();
@@ -25,6 +26,7 @@ const ManualSwap = () => {
   const [currentStep, setCurrentStep] = useState('form');
   const [txHash, setTxHash] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showHealthCheck, setShowHealthCheck] = useState(false);
 
   // Wait for assets to load before rendering the form
   if (assetsLoading) {
@@ -161,7 +163,31 @@ const ManualSwap = () => {
           <p className="text-muted-foreground">
             Intercambia tokens proporcionando tu propia dirección de destino
           </p>
+          
+          {/* Health Check Toggle */}
+          <div className="mt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowHealthCheck(!showHealthCheck)}
+              className="text-xs"
+            >
+              {showHealthCheck ? 'Ocultar' : 'Mostrar'} Health Check
+            </Button>
+          </div>
         </motion.div>
+
+        {/* Health Check Component */}
+        {showHealthCheck && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mb-8"
+          >
+            <ProviderHealthCheck />
+          </motion.div>
+        )}
 
         <AnimatePresence mode="wait">
           {currentStep === 'form' && (
